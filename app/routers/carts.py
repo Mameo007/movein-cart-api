@@ -8,11 +8,15 @@ from datetime import datetime
 router = APIRouter()
 
 # --- API ENDPOINTS ---
+
+# GET
 @router.get("/api/carts", response_model=list[CartResponse])
 def get_all_carts(db: Session = Depends(get_db)):
     """Fetches all carts from the database."""
     return db.query(Cart).all()
 
+
+# POST
 @router.post("/api/carts", response_model=CartResponse)
 def create_cart(cart: CartCreate, db: Session = Depends(get_db)):
     """Adds a brand new cart to the database."""
@@ -26,6 +30,7 @@ def create_cart(cart: CartCreate, db: Session = Depends(get_db)):
     db.refresh(new_cart)
     return new_cart
 
+# CHECKOUT
 @router.post("/api/carts/{cart_id}/checkout", response_model=SessionResponse)
 def checkout_cart(cart_id: int, data: SessionCreate, db: Session = Depends(get_db)):
 
@@ -65,6 +70,7 @@ def checkout_cart(cart_id: int, data: SessionCreate, db: Session = Depends(get_d
     db.refresh(new_session)
     return new_session
 
+# RETURN
 @router.post("/api/carts/{cart_id}/return")
 def return_cart(cart_id: int, db: Session = Depends(get_db)):
 
