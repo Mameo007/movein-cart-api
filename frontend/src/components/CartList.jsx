@@ -14,7 +14,7 @@ function CartList() {
     }
 
     function handleReturn(cartId) {
-        fetch(`http://localhost:8000/api/carts/${cartId}/return`, {
+        fetch(`${import.meta.env.VITE_API_URL}/api/carts/${cartId}/return`, {
             method: 'POST'
         }).then(response => {
             if (response.ok) {
@@ -26,7 +26,7 @@ function CartList() {
     }
 
     function fetchCarts() {
-        fetch('http://localhost:8000/api/carts')
+        fetch(`${import.meta.env.VITE_API_URL}/api/carts`)
             .then(response => response.json())
             .then(data => setItems(data))
             .catch(error => console.error(error))

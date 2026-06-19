@@ -15,7 +15,7 @@ function CheckoutForm() {
 
     const handleSubmit = (e) => {
         e.preventDefault()
-        fetch(`http://localhost:8000/api/carts/${cartId}/checkout`, {
+        fetch(`${import.meta.env.VITE_API_URL}/api/carts/${cartId}/checkout`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
