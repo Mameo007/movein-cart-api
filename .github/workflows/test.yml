@@ -21,3 +21,7 @@ jobs:
 
       - name: Run tests
         run: pytest tests/ -v
+
+      - name: Deploy to Render
+        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
