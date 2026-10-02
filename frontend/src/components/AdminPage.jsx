@@ -1,85 +1,85 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authHeaders, clearToken } from '../auth'
+import AdminCarts from './AdminCarts'
+import AdminSessions from './AdminSessions'
+import { isOverdue } from '../sessions'
 
-// <input type="datetime-local"> wants "YYYY-MM-DDTHH:MM", the API sends full ISO
-function toInputValue(isoString) {
-    return isoString.slice(0, 16)
-}
+// How often the overdue highlighting re-checks the clock
+const CLOCK_TICK_MS = 30 * 1000
 
 function AdminPage() {
+    const [carts, setCarts] = useState([])
     const [sessions, setSessions] = useState([])
-    const [dueEdits, setDueEdits] = useState({})
+    const [now, setNow] = useState(new Date())
     const navigate = useNavigate()
 
     useEffect(() => {
-        fetchSessions()
+        refresh()
+        // Re-render every so often so a cart flips to overdue without a reload
+        const timer = setInterval(() => setNow(new Date()), CLOCK_TICK_MS)
+        return () => clearInterval(timer)
     }, [])
-
-    // An expired or missing token means the API says 401 -- send them back to login
-    function handleUnauthorized() {
-        clearToken()
-        navigate('/admin/login')
-    }
 
     function handleLogout() {
         clearToken()
         navigate('/admin/login')
     }
 
-    function fetchSessions() {
-        fetch(`${import.meta.env.VITE_API_URL}/api/admin/sessions`, {
-            headers: authHeaders()
-        }).then(response => {
-            if (response.status === 401) {
-                handleUnauthorized()
-                return
-            }
-            return response.json().then(data => {
-                setSessions(data)
-                // Seed each row's input with the due time already on the session
-                setDueEdits(Object.fromEntries(data.map(s => [s.id, toInputValue(s.due_at)])))
-            })
-        }).catch(error => console.error(error))
-    }
-
-    function handleUpdateDue(sessionId) {
-        fetch(`${import.meta.env.VITE_API_URL}/api/admin/sessions/${sessionId}`, {
-            method: 'PATCH',
+    // Every admin request goes through here so a 401 (expired or missing token)
+    // always sends them back to login. Resolves to null in that case.
+    function adminFetch(path, options = {}) {
+        return fetch(`${import.meta.env.VITE_API_URL}${path}`, {
+            ...options,
             headers: {
                 'Content-Type': 'application/json',
-                ...authHeaders()
-            },
-            body: JSON.stringify({ due_at: dueEdits[sessionId] })
+                ...authHeaders(),
+                ...options.headers
+            }
         }).then(response => {
             if (response.status === 401) {
-                handleUnauthorized()
-            } else if (response.ok) {
-                fetchSessions()
-            } else {
-                console.error('Due time update failed')
+                handleLogout()
+                return null
             }
-        }).catch(error => console.error(error))
+            return response
+        })
+    }
+
+    // Carts and active sessions feed both sections and the counts, so reload together
+    function refresh() {
+        adminFetch('/api/carts')
+            .then(response => response && response.json())
+            .then(data => data && setCarts(data))
+            .catch(error => console.error(error))
+
+        adminFetch('/api/admin/sessions')
+            .then(response => response && response.json())
+            .then(data => data && setSessions(data))
+            .catch(error => console.error(error))
+    }
+
+    const counts = {
+        available: carts.filter(c => c.status === 'AVAILABLE').length,
+        inUse: carts.filter(c => c.status === 'IN_USE').length,
+        overdue: sessions.filter(s => isOverdue(s, now)).length,
+        maintenance: carts.filter(c => c.status === 'MAINTENANCE').length
     }
 
     return (
         <div>
-            <h2>Active Sessions</h2>
+            <h2>Admin</h2>
             <button onClick={handleLogout}>Log Out</button>
 
-            {sessions.length === 0 && <p>No carts are currently checked out.</p>}
+            <p>
+                Available: {counts.available} | In Use: {counts.inUse} |{' '}
+                <span style={counts.overdue > 0 ? { color: 'red', fontWeight: 'bold' } : undefined}>
+                    Overdue: {counts.overdue}
+                </span>{' '}
+                | Out of Service: {counts.maintenance}
+            </p>
 
-            {sessions.map(session => (
-                <div key={session.id}>
-                    Cart {session.cart_number} - {session.first_name} {session.last_name} - Room {session.room_number} - {session.phone_number}
-                    <input
-                        type="datetime-local"
-                        value={dueEdits[session.id] ?? ''}
-                        onChange={e => setDueEdits({ ...dueEdits, [session.id]: e.target.value })}
-                    />
-                    <button onClick={() => handleUpdateDue(session.id)}>Update Due Time</button>
-                </div>
-            ))}
+            <AdminSessions sessions={sessions} now={now} adminFetch={adminFetch} onChange={refresh} />
+            <AdminCarts carts={carts} adminFetch={adminFetch} onChange={refresh} />
         </div>
     )
 }
