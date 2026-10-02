@@ -1,9 +1,14 @@
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session                  # db session type
 from ..models import Cart, Session as SessionModel  # ORM model gets the alias
 from ..database import get_db
-from ..schemas import AdminLogin, TokenResponse, SessionDueUpdate, SessionResponse, ActiveSessionResponse
+from ..schemas import (
+    AdminLogin, TokenResponse, SessionDueUpdate, SessionResponse, ActiveSessionResponse,
+    CartCreate, CartResponse, CartStatusUpdate,
+)
 from ..auth import verify_password, create_access_token, require_admin
+from .carts import close_session
 
 # Login is public -- it's how you get a token in the first place
 login_router = APIRouter(prefix="/api/admin")
@@ -30,18 +35,23 @@ def _to_response(session, cart_number):
     return ActiveSessionResponse(**fields, cart_number=cart_number)
 
 @router.get("/sessions", response_model=list[ActiveSessionResponse])
-def get_active_sessions(db: Session = Depends(get_db)):
-    """Master list of every cart currently checked out, soonest due first."""
-    rows = (
-        db.query(SessionModel, Cart.cart_number)
-        .join(Cart, Cart.id == SessionModel.cart_id)
-        .filter(SessionModel.returned_at == None)
-        .order_by(SessionModel.due_at)
-        .all()
-    )
+def get_sessions(
+    status: Literal["active", "returned", "all"] = "active",
+    db: Session = Depends(get_db),
+):
+    """Active sessions soonest due first (the master list), or past sessions
+    newest first for history."""
+    query = db.query(SessionModel, Cart.cart_number).join(Cart, Cart.id == SessionModel.cart_id)
+
+    if status == "active":
+        query = query.filter(SessionModel.returned_at == None).order_by(SessionModel.due_at)
+    else:
+        if status == "returned":
+            query = query.filter(SessionModel.returned_at != None)
+        query = query.order_by(SessionModel.checked_out_at.desc(), SessionModel.id.desc())
 
     # Each row is (session, cart_number) -- merge them into one response object
-    return [_to_response(session, cart_number) for session, cart_number in rows]
+    return [_to_response(session, cart_number) for session, cart_number in query.all()]
 
 
 @router.patch("/sessions/{session_id}", response_model=ActiveSessionResponse)
@@ -63,3 +73,71 @@ def update_session_due_at(session_id: int, data: SessionDueUpdate, db: Session =
 
     cart_number = db.query(Cart.cart_number).filter(Cart.id == db_session.cart_id).scalar()
     return _to_response(db_session, cart_number)
+
+
+@router.post("/sessions/{session_id}/return", response_model=ActiveSessionResponse)
+def force_return_session(session_id: int, db: Session = Depends(get_db)):
+    """Ends a session from the admin side, e.g. a cart found abandoned in a hallway."""
+    db_session = db.query(SessionModel).filter(SessionModel.id == session_id).first()
+    if not db_session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if db_session.returned_at is not None:
+        raise HTTPException(status_code=400, detail="Session is already returned")
+
+    db_cart = db.query(Cart).filter(Cart.id == db_session.cart_id).first()
+    close_session(db_cart, db_session)
+    db.commit()
+    db.refresh(db_session)
+
+    return _to_response(db_session, db_cart.cart_number)
+
+# --- CART INVENTORY ---
+
+def _get_cart_or_404(cart_id, db):
+    db_cart = db.query(Cart).filter(Cart.id == cart_id).first()
+    if not db_cart:
+        raise HTTPException(status_code=404, detail="Cart not found")
+    return db_cart
+
+
+@router.post("/carts", response_model=CartResponse)
+def create_cart(cart: CartCreate, db: Session = Depends(get_db)):
+    """Adds a brand new cart to the fleet."""
+    if db.query(Cart).filter(Cart.cart_number == cart.cart_number).first():
+        raise HTTPException(status_code=400, detail="Cart number already exists")
+
+    new_cart = Cart(cart_number=cart.cart_number)
+    db.add(new_cart)
+    db.commit()
+    db.refresh(new_cart)
+    return new_cart
+
+
+@router.patch("/carts/{cart_id}", response_model=CartResponse)
+def update_cart_status(cart_id: int, data: CartStatusUpdate, db: Session = Depends(get_db)):
+    """Takes a cart out of service (MAINTENANCE) or puts it back (AVAILABLE)."""
+    db_cart = _get_cart_or_404(cart_id, db)
+
+    # A cart someone is using has to be returned first, or its session would be orphaned
+    if db_cart.status == "IN_USE":
+        raise HTTPException(status_code=400, detail="Cart is checked out -- return it first")
+
+    db_cart.status = data.status
+    db.commit()
+    db.refresh(db_cart)
+    return db_cart
+
+
+@router.delete("/carts/{cart_id}", status_code=204)
+def delete_cart(cart_id: int, db: Session = Depends(get_db)):
+    """Removes a cart and its past sessions. Use MAINTENANCE instead to keep the history."""
+    db_cart = _get_cart_or_404(cart_id, db)
+
+    if db_cart.status == "IN_USE":
+        raise HTTPException(status_code=400, detail="Cart is checked out -- return it first")
+
+    # Sessions point at the cart, so they have to go first or Postgres rejects the delete
+    db.query(SessionModel).filter(SessionModel.cart_id == cart_id).delete()
+    db.delete(db_cart)
+    db.commit()
