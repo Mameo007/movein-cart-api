@@ -1,17 +1,8 @@
 import { useState } from 'react'
 import { isOverdue } from '../sessions'
+import { formatTime, toInputValue } from '../time'
 
 const QUICK_EXTENDS = [15, 30, 60]
-
-// <input type="datetime-local"> wants "YYYY-MM-DDTHH:MM" in local time
-function toInputValue(date) {
-    const pad = n => String(n).padStart(2, '0')
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-function formatTime(isoString) {
-    return new Date(isoString).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
-}
 
 function minutesOverdue(session, now) {
     return Math.floor((now - new Date(session.due_at)) / 60000)
@@ -24,7 +15,7 @@ function matchesSearch(session, search) {
         .some(field => field.toLowerCase().includes(needle))
 }
 
-function AdminSessions({ sessions, now, adminFetch, onChange }) {
+function AdminSessions({ sessions, now, timezone, adminFetch, onChange }) {
     const [view, setView] = useState('active')
     const [history, setHistory] = useState([])
     // Only what the admin has typed but not saved; untouched rows show the session's due time
@@ -59,10 +50,11 @@ function AdminSessions({ sessions, now, adminFetch, onChange }) {
     }
 
     // Extend from whichever is later, the due time or now -- adding 15 minutes
-    // to a cart that's an hour overdue would still leave it overdue
+    // to a cart that's an hour overdue would still leave it overdue.
+    // Sent as an exact UTC instant, so the API doesn't reinterpret it in the site zone.
     function handleQuickExtend(session, minutes) {
         const base = Math.max(new Date(session.due_at), now)
-        updateDue(session.id, toInputValue(new Date(base + minutes * 60000)))
+        updateDue(session.id, new Date(base + minutes * 60000).toISOString())
     }
 
     function handleForceReturn(session) {
@@ -101,12 +93,12 @@ function AdminSessions({ sessions, now, adminFetch, onChange }) {
                                 Cart {session.cart_number} - {session.first_name} {session.last_name} - Room {session.room_number} -{' '}
                                 <a href={`tel:${session.phone_number}`}>{session.phone_number}</a>{' '}
                                 (<a href={`sms:${session.phone_number}`}>text</a>)
-                                {' '}- Due {formatTime(session.due_at)}
+                                {' '}- Due {formatTime(session.due_at, timezone)}
                                 {overdue && <strong> ({minutesOverdue(session, now)} min overdue)</strong>}
 
                                 <input
                                     type="datetime-local"
-                                    value={dueEdits[session.id] ?? toInputValue(new Date(session.due_at))}
+                                    value={dueEdits[session.id] ?? toInputValue(new Date(session.due_at), timezone)}
                                     onChange={e => setDueEdits({ ...dueEdits, [session.id]: e.target.value })}
                                 />
                                 <button
@@ -134,7 +126,7 @@ function AdminSessions({ sessions, now, adminFetch, onChange }) {
                     {historyRows.map(session => (
                         <div key={session.id}>
                             Cart {session.cart_number} - {session.first_name} {session.last_name} - Room {session.room_number} -{' '}
-                            {session.phone_number} - Out {formatTime(session.checked_out_at)} - Returned {formatTime(session.returned_at)}
+                            {session.phone_number} - Out {formatTime(session.checked_out_at, timezone)} - Returned {formatTime(session.returned_at, timezone)}
                         </div>
                     ))}
                 </>

@@ -1,5 +1,5 @@
-// The API sends due_at without a timezone, which the browser reads as local
-// time -- the same clock the due time was typed in on.
+// due_at comes back as UTC ("...Z"), so this compares exact instants and
+// doesn't depend on the browser's or the site's timezone.
 export function isOverdue(session, now) {
     return new Date(session.due_at) < now
 }

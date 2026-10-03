@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session                  # db session type
 from ..models import Cart, Session as SessionModel  # ORM model gets the alias
 from ..database import get_db
 from ..schemas import CartResponse, SessionCreate, SessionResponse
-from datetime import datetime
+from ..timezones import to_utc, utc_now
+from .settings import get_site_timezone
 
 router = APIRouter()
 
@@ -13,7 +14,7 @@ router = APIRouter()
 def close_session(db_cart, active_session):
     """Marks a session returned and frees its cart. Shared with the admin
     force-return so both paths end a session the same way."""
-    active_session.returned_at = datetime.now()
+    active_session.returned_at = utc_now()
     db_cart.status = "AVAILABLE"
 
 # --- API ENDPOINTS ---
@@ -53,7 +54,7 @@ def checkout_cart(cart_id: int, data: SessionCreate, db: Session = Depends(get_d
         last_name=data.last_name,
         phone_number=data.phone_number,
         room_number=data.room_number,
-        due_at=data.due_at,            
+        due_at=to_utc(data.due_at, get_site_timezone(db)),
     )
 
     # Update the cart's status to "IN_USE"
