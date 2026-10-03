@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 class CartCreate(BaseModel):
@@ -29,3 +30,21 @@ class SessionResponse(BaseModel):
     checked_out_at: datetime
     due_at: datetime
     returned_at: datetime | None
+
+class AdminLogin(BaseModel):
+    password: str
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+class SessionDueUpdate(BaseModel):
+    due_at: datetime
+
+class ActiveSessionResponse(SessionResponse):
+    # The cart's label, so the admin list doesn't just show raw cart ids
+    cart_number: str
+
+class CartStatusUpdate(BaseModel):
+    # IN_USE is only ever set by a checkout, so the admin can't pick it here
+    status: Literal["AVAILABLE", "MAINTENANCE"]

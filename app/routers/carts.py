@@ -2,10 +2,19 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session                  # db session type
 from ..models import Cart, Session as SessionModel  # ORM model gets the alias
 from ..database import get_db
-from ..schemas import CartCreate, CartResponse, SessionCreate, SessionResponse
+from ..schemas import CartResponse, SessionCreate, SessionResponse
 from datetime import datetime
 
 router = APIRouter()
+
+# Carts are created, retired and taken out of service from the admin router.
+# This one only holds what a resident at the desk needs: list, checkout, return.
+
+def close_session(db_cart, active_session):
+    """Marks a session returned and frees its cart. Shared with the admin
+    force-return so both paths end a session the same way."""
+    active_session.returned_at = datetime.now()
+    db_cart.status = "AVAILABLE"
 
 # --- API ENDPOINTS ---
 
@@ -15,20 +24,6 @@ def get_all_carts(db: Session = Depends(get_db)):
     """Fetches all carts from the database."""
     return db.query(Cart).all()
 
-
-# POST
-@router.post("/api/carts", response_model=CartResponse)
-def create_cart(cart: CartCreate, db: Session = Depends(get_db)):
-    """Adds a brand new cart to the database."""
-    db_cart = db.query(Cart).filter(Cart.cart_number == cart.cart_number).first()
-    if db_cart:
-        raise HTTPException(status_code=400, detail="Cart number already exists")
-    
-    new_cart = Cart(cart_number=cart.cart_number)
-    db.add(new_cart)
-    db.commit()
-    db.refresh(new_cart)
-    return new_cart
 
 # CHECKOUT
 @router.post("/api/carts/{cart_id}/checkout", response_model=SessionResponse)
@@ -80,8 +75,8 @@ def return_cart(cart_id: int, db: Session = Depends(get_db)):
     if not db_cart:
         raise HTTPException(status_code=404, detail="Cart not found")
     
-    # 2. Check if the cart is already checked out, if so, raiase a 400 error
-    if db_cart.status == "AVAILABLE":
+    # 2. Only a checked-out cart can be returned (not AVAILABLE or MAINTENANCE)
+    if db_cart.status != "IN_USE":
         raise HTTPException(status_code=400, detail="Cart is not currently checked out")
     
     # 3. Find the active session for this cart (the one with returned_at == None)
@@ -92,9 +87,8 @@ def return_cart(cart_id: int, db: Session = Depends(get_db)):
     if not active_session:
         raise HTTPException(status_code=400, detail="No Active Session Found fo this Cart")
     
-    # 4. Set the session's returned_at to now
-    active_session.returned_at = datetime.now()
-    db_cart.status = "AVAILABLE"
+    # 4. Set the session's returned_at to now and free the cart
+    close_session(db_cart, active_session)
 
     db.commit()
     db.refresh(db_cart)

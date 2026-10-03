@@ -24,13 +24,21 @@ def setup_database():
 
 client = TestClient(app)
 
+def create_cart(cart_number):
+    # Carts can only be created by the admin now
+    return client.post("/api/admin/carts", json={"cart_number": cart_number}, headers=admin_headers())
+
 def test_get_carts():
     response = client.get("/api/carts")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
-def test_create_cart():
+def test_public_cart_create_is_gone():
     response = client.post("/api/carts", json={"cart_number": "TEST123"})
+    assert response.status_code == 405
+
+def test_create_cart():
+    response = create_cart("TEST123")
     assert response.status_code == 200
     data = response.json()
     assert data["cart_number"] == "TEST123"
@@ -46,7 +54,7 @@ CHECKOUT_BODY = {
 
 def test_checkout_cart():
     # Create a cart, then check it out
-    cart_id = client.post("/api/carts", json={"cart_number": "CHECKOUT123"}).json()["id"]
+    cart_id = create_cart("CHECKOUT123").json()["id"]
 
     checkout_response = client.post(f"/api/carts/{cart_id}/checkout", json=CHECKOUT_BODY)
     assert checkout_response.status_code == 200
@@ -55,7 +63,7 @@ def test_checkout_cart():
 
 def test_checkout_already_in_use():
     # Create and checkout a cart, then try to checkout again
-    cart_id = client.post("/api/carts", json={"cart_number": "INUSE123"}).json()["id"]
+    cart_id = create_cart("INUSE123").json()["id"]
     client.post(f"/api/carts/{cart_id}/checkout", json=CHECKOUT_BODY)
 
     response = client.post(f"/api/carts/{cart_id}/checkout", json=CHECKOUT_BODY)
@@ -63,7 +71,7 @@ def test_checkout_already_in_use():
 
 def test_return_cart():
     # Create a cart, check it out, then return it
-    cart_id = client.post("/api/carts", json={"cart_number": "RETURN123"}).json()["id"]
+    cart_id = create_cart("RETURN123").json()["id"]
     client.post(f"/api/carts/{cart_id}/checkout", json=CHECKOUT_BODY)
 
     return_response = client.post(f"/api/carts/{cart_id}/return")
@@ -77,4 +85,186 @@ def test_checkout_nonexistent_cart():
 
 def test_return_nonexistent_cart():
     response = client.post("/api/carts/9999/return")
+    assert response.status_code == 404
+
+# --- ADMIN ---
+
+ADMIN_PASSWORD = "test-admin-password"
+
+@pytest.fixture(autouse=True)
+def admin_env(monkeypatch):
+    monkeypatch.setenv("ADMIN_PASSWORD", ADMIN_PASSWORD)
+    # HS256 wants at least 32 bytes of key
+    monkeypatch.setenv("ADMIN_JWT_SECRET", "test-secret-that-is-long-enough-for-hs256")
+
+def admin_headers():
+    token = client.post("/api/admin/login", json={"password": ADMIN_PASSWORD}).json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+def checked_out_session(cart_number):
+    # Create a cart and check it out, returning the new session
+    cart_id = create_cart(cart_number).json()["id"]
+    return client.post(f"/api/carts/{cart_id}/checkout", json=CHECKOUT_BODY).json()
+
+def test_admin_login_wrong_password():
+    response = client.post("/api/admin/login", json={"password": "wrong"})
+    assert response.status_code == 401
+
+def test_admin_login_success():
+    response = client.post("/api/admin/login", json={"password": ADMIN_PASSWORD})
+    assert response.status_code == 200
+    assert response.json()["token_type"] == "bearer"
+
+def test_admin_sessions_requires_token():
+    response = client.get("/api/admin/sessions")
+    assert response.status_code == 401
+
+def test_admin_sessions_rejects_bad_token():
+    response = client.get("/api/admin/sessions", headers={"Authorization": "Bearer not-a-real-token"})
+    assert response.status_code == 401
+
+def test_admin_update_due_at_requires_token():
+    response = client.patch("/api/admin/sessions/1", json={"due_at": "2026-06-08T18:00:00"})
+    assert response.status_code == 401
+
+def test_admin_lists_only_active_sessions():
+    active = checked_out_session("ADMIN_ACTIVE")
+    returned = checked_out_session("ADMIN_RETURNED")
+    client.post(f"/api/carts/{returned['cart_id']}/return")
+
+    response = client.get("/api/admin/sessions", headers=admin_headers())
+    assert response.status_code == 200
+
+    listed = response.json()
+    assert [s["id"] for s in listed] == [active["id"]]
+    assert listed[0]["cart_number"] == "ADMIN_ACTIVE"
+
+def test_admin_sessions_sorted_by_due_at():
+    later = checked_out_session("ADMIN_LATER")
+    sooner = checked_out_session("ADMIN_SOONER")
+
+    headers = admin_headers()
+    client.patch(f"/api/admin/sessions/{later['id']}", json={"due_at": "2026-06-09T18:00:00"}, headers=headers)
+    client.patch(f"/api/admin/sessions/{sooner['id']}", json={"due_at": "2026-06-07T18:00:00"}, headers=headers)
+
+    listed = client.get("/api/admin/sessions", headers=headers).json()
+    assert [s["id"] for s in listed] == [sooner["id"], later["id"]]
+
+def test_admin_update_due_at():
+    session = checked_out_session("ADMIN_UPDATE")
+
+    response = client.patch(
+        f"/api/admin/sessions/{session['id']}",
+        json={"due_at": "2026-06-10T12:00:00"},
+        headers=admin_headers(),
+    )
+    assert response.status_code == 200
+    assert response.json()["due_at"] == "2026-06-10T12:00:00"
+
+def test_admin_update_due_at_nonexistent_session():
+    response = client.patch("/api/admin/sessions/9999", json={"due_at": "2026-06-10T12:00:00"}, headers=admin_headers())
+    assert response.status_code == 404
+
+def test_admin_update_due_at_returned_session():
+    session = checked_out_session("ADMIN_DONE")
+    client.post(f"/api/carts/{session['cart_id']}/return")
+
+    response = client.patch(
+        f"/api/admin/sessions/{session['id']}",
+        json={"due_at": "2026-06-10T12:00:00"},
+        headers=admin_headers(),
+    )
+    assert response.status_code == 400
+
+def test_admin_session_history():
+    active = checked_out_session("HIST_ACTIVE")
+    returned = checked_out_session("HIST_RETURNED")
+    client.post(f"/api/carts/{returned['cart_id']}/return")
+    headers = admin_headers()
+
+    past = client.get("/api/admin/sessions?status=returned", headers=headers).json()
+    assert [s["id"] for s in past] == [returned["id"]]
+    assert past[0]["returned_at"] is not None
+
+    everything = client.get("/api/admin/sessions?status=all", headers=headers).json()
+    assert {s["id"] for s in everything} == {active["id"], returned["id"]}
+
+def test_admin_session_history_rejects_unknown_status():
+    response = client.get("/api/admin/sessions?status=bogus", headers=admin_headers())
+    assert response.status_code == 422
+
+def test_admin_force_return():
+    session = checked_out_session("FORCE_RETURN")
+
+    response = client.post(f"/api/admin/sessions/{session['id']}/return", headers=admin_headers())
+    assert response.status_code == 200
+    assert response.json()["returned_at"] is not None
+
+    cart = next(c for c in client.get("/api/carts").json() if c["id"] == session["cart_id"])
+    assert cart["status"] == "AVAILABLE"
+
+def test_admin_force_return_twice():
+    session = checked_out_session("FORCE_TWICE")
+    headers = admin_headers()
+    client.post(f"/api/admin/sessions/{session['id']}/return", headers=headers)
+
+    response = client.post(f"/api/admin/sessions/{session['id']}/return", headers=headers)
+    assert response.status_code == 400
+
+def test_admin_force_return_requires_token():
+    response = client.post("/api/admin/sessions/1/return")
+    assert response.status_code == 401
+
+def test_admin_create_cart_requires_token():
+    response = client.post("/api/admin/carts", json={"cart_number": "NOPE"})
+    assert response.status_code == 401
+
+def test_admin_create_duplicate_cart():
+    create_cart("DUPE")
+    response = create_cart("DUPE")
+    assert response.status_code == 400
+
+def test_maintenance_cart_cannot_be_checked_out():
+    cart_id = create_cart("MAINT").json()["id"]
+    headers = admin_headers()
+
+    response = client.patch(f"/api/admin/carts/{cart_id}", json={"status": "MAINTENANCE"}, headers=headers)
+    assert response.status_code == 200
+    assert response.json()["status"] == "MAINTENANCE"
+
+    assert client.post(f"/api/carts/{cart_id}/checkout", json=CHECKOUT_BODY).status_code == 400
+    assert client.post(f"/api/carts/{cart_id}/return").status_code == 400
+
+    response = client.patch(f"/api/admin/carts/{cart_id}", json={"status": "AVAILABLE"}, headers=headers)
+    assert response.json()["status"] == "AVAILABLE"
+
+def test_admin_cannot_set_in_use():
+    cart_id = create_cart("NO_IN_USE").json()["id"]
+    response = client.patch(f"/api/admin/carts/{cart_id}", json={"status": "IN_USE"}, headers=admin_headers())
+    assert response.status_code == 422
+
+def test_admin_cannot_change_status_of_checked_out_cart():
+    session = checked_out_session("BUSY_STATUS")
+    response = client.patch(
+        f"/api/admin/carts/{session['cart_id']}", json={"status": "MAINTENANCE"}, headers=admin_headers()
+    )
+    assert response.status_code == 400
+
+def test_admin_delete_cart_with_history():
+    session = checked_out_session("DELETE_ME")
+    client.post(f"/api/carts/{session['cart_id']}/return")
+    headers = admin_headers()
+
+    response = client.delete(f"/api/admin/carts/{session['cart_id']}", headers=headers)
+    assert response.status_code == 204
+    assert session["cart_id"] not in [c["id"] for c in client.get("/api/carts").json()]
+    assert client.get("/api/admin/sessions?status=all", headers=headers).json() == []
+
+def test_admin_cannot_delete_checked_out_cart():
+    session = checked_out_session("BUSY_DELETE")
+    response = client.delete(f"/api/admin/carts/{session['cart_id']}", headers=admin_headers())
+    assert response.status_code == 400
+
+def test_admin_delete_nonexistent_cart():
+    response = client.delete("/api/admin/carts/9999", headers=admin_headers())
     assert response.status_code == 404

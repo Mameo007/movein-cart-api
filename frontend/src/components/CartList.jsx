@@ -37,7 +37,9 @@ function CartList() {
             {items.map(cart => (
                 <div key={cart.id}>
                     {cart.id} - {cart.status}
-                    {cart.status === 'AVAILABLE' ? <button onClick={() => handleCheckout(cart.id)}>Checkout</button> : <button onClick={() => handleReturn(cart.id)}>Return</button>}
+                    {cart.status === 'AVAILABLE' && <button onClick={() => handleCheckout(cart.id)}>Checkout</button>}
+                    {cart.status === 'IN_USE' && <button onClick={() => handleReturn(cart.id)}>Return</button>}
+                    {/* MAINTENANCE carts get no button -- the admin puts them back in service */}
                 </div>
             ))}
         </div>
