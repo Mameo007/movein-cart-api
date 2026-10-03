@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from .database import Base, engine
 from .routers.carts import router
+from .routers.settings import router as settings_router
 from .routers.admin import router as admin_router, login_router as admin_login_router
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -18,5 +19,6 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(settings_router)
 app.include_router(admin_login_router)
 app.include_router(admin_router)

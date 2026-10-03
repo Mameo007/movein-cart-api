@@ -5,10 +5,12 @@ from ..models import Cart, Session as SessionModel  # ORM model gets the alias
 from ..database import get_db
 from ..schemas import (
     AdminLogin, TokenResponse, SessionDueUpdate, SessionResponse, ActiveSessionResponse,
-    CartCreate, CartResponse, CartStatusUpdate,
+    CartCreate, CartResponse, CartStatusUpdate, SettingsResponse, TimezoneUpdate,
 )
 from ..auth import verify_password, create_access_token, require_admin
 from .carts import close_session
+from .settings import get_site_timezone, set_site_timezone
+from ..timezones import to_utc
 
 # Login is public -- it's how you get a token in the first place
 login_router = APIRouter(prefix="/api/admin")
@@ -67,7 +69,7 @@ def update_session_due_at(session_id: int, data: SessionDueUpdate, db: Session =
     if db_session.returned_at is not None:
         raise HTTPException(status_code=400, detail="Session is already returned")
 
-    db_session.due_at = data.due_at
+    db_session.due_at = to_utc(data.due_at, get_site_timezone(db))
     db.commit()
     db.refresh(db_session)
 
@@ -141,3 +143,13 @@ def delete_cart(cart_id: int, db: Session = Depends(get_db)):
     db.query(SessionModel).filter(SessionModel.cart_id == cart_id).delete()
     db.delete(db_cart)
     db.commit()
+
+# --- SETTINGS ---
+
+@router.put("/settings/timezone", response_model=SettingsResponse)
+def update_timezone(data: TimezoneUpdate, db: Session = Depends(get_db)):
+    """Sets the timezone due times are entered and shown in. Stored times are
+    UTC, so switching zones changes how they display, not when carts are due."""
+    set_site_timezone(db, data.timezone)
+    db.commit()
+    return SettingsResponse(timezone=get_site_timezone(db))

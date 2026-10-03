@@ -1,6 +1,6 @@
 from .database import Base
 from sqlalchemy import Column, ForeignKey, Integer, String, DateTime
-from sqlalchemy.sql import func
+from .timezones import utc_now
 
 
 class Cart(Base):
@@ -20,7 +20,16 @@ class Session(Base):
     phone_number = Column(String)
     room_number = Column(String)
 
-    # Auto-set to current timestamp when the session is created
-    checked_out_at = Column(DateTime, server_default=func.now())
+    # Every timestamp is stored as naive UTC. The site's timezone (a Setting)
+    # is only applied when a time is typed in or shown.
+    # Set in Python rather than by the database, whose clock zone we don't control
+    checked_out_at = Column(DateTime, default=utc_now)
     due_at = Column(DateTime)
     returned_at = Column(DateTime, nullable=True)
+
+class Setting(Base):
+    """Site-wide key/value settings the admin can change, like the timezone."""
+    __tablename__ = "settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(String)

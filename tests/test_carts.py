@@ -152,14 +152,27 @@ def test_admin_sessions_sorted_by_due_at():
 
 def test_admin_update_due_at():
     session = checked_out_session("ADMIN_UPDATE")
+    headers = admin_headers()
+    client.put("/api/admin/settings/timezone", json={"timezone": "America/New_York"}, headers=headers)
 
+    # Noon typed in Eastern (EDT, UTC-4) is stored and returned as 16:00 UTC
     response = client.patch(
         f"/api/admin/sessions/{session['id']}",
         json={"due_at": "2026-06-10T12:00:00"},
-        headers=admin_headers(),
+        headers=headers,
     )
     assert response.status_code == 200
-    assert response.json()["due_at"] == "2026-06-10T12:00:00"
+    assert response.json()["due_at"] == "2026-06-10T16:00:00Z"
+
+def test_admin_update_due_at_with_offset_ignores_site_timezone():
+    # The quick-extend buttons send an exact instant, so the site zone doesn't apply
+    session = checked_out_session("ADMIN_OFFSET")
+    response = client.patch(
+        f"/api/admin/sessions/{session['id']}",
+        json={"due_at": "2026-06-10T16:00:00Z"},
+        headers=admin_headers(),
+    )
+    assert response.json()["due_at"] == "2026-06-10T16:00:00Z"
 
 def test_admin_update_due_at_nonexistent_session():
     response = client.patch("/api/admin/sessions/9999", json={"due_at": "2026-06-10T12:00:00"}, headers=admin_headers())
@@ -268,3 +281,43 @@ def test_admin_cannot_delete_checked_out_cart():
 def test_admin_delete_nonexistent_cart():
     response = client.delete("/api/admin/carts/9999", headers=admin_headers())
     assert response.status_code == 404
+
+# --- TIMEZONE ---
+
+def test_default_timezone():
+    response = client.get("/api/settings")
+    assert response.status_code == 200
+    assert response.json() == {"timezone": "America/Chicago"}
+
+def test_checkout_due_at_uses_site_timezone():
+    client.put("/api/admin/settings/timezone", json={"timezone": "America/Denver"}, headers=admin_headers())
+
+    # 18:00 Mountain (MDT, UTC-6) is midnight UTC the next day
+    session = checked_out_session("TZ_CHECKOUT")
+    assert session["due_at"] == "2026-06-08T00:00:00Z"
+
+def test_timestamps_are_marked_utc():
+    session = checked_out_session("TZ_STAMPS")
+    assert session["checked_out_at"].endswith("Z")
+
+    returned = client.post(f"/api/admin/sessions/{session['id']}/return", headers=admin_headers()).json()
+    assert returned["returned_at"].endswith("Z")
+
+def test_update_timezone():
+    headers = admin_headers()
+    response = client.put("/api/admin/settings/timezone", json={"timezone": "Pacific/Honolulu"}, headers=headers)
+    assert response.status_code == 200
+    assert response.json() == {"timezone": "Pacific/Honolulu"}
+
+    # Saving twice updates the one row rather than adding another
+    client.put("/api/admin/settings/timezone", json={"timezone": "America/Phoenix"}, headers=headers)
+    assert client.get("/api/settings").json() == {"timezone": "America/Phoenix"}
+
+def test_update_timezone_rejects_unknown():
+    for bad in ["Mars/Olympus_Mons", "", "../etc/passwd"]:
+        response = client.put("/api/admin/settings/timezone", json={"timezone": bad}, headers=admin_headers())
+        assert response.status_code == 422
+
+def test_update_timezone_requires_token():
+    response = client.put("/api/admin/settings/timezone", json={"timezone": "America/Denver"})
+    assert response.status_code == 401
