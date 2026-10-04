@@ -3,6 +3,7 @@ import CheckoutForm from './components/CheckoutForm'
 import AdminLogin from './components/AdminLogin'
 import AdminPage from './components/AdminPage'
 import RequireAdmin from './components/RequireAdmin'
+import NotFound from './components/NotFound'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
           <Route path="/checkout/:cartId" element={<CheckoutForm />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </div>
