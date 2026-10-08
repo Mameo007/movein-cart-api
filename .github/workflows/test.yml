@@ -7,8 +7,6 @@ on:
 jobs:
   test-and-deploy:
     runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
     steps:
       - name: Checkout code
