@@ -5,7 +5,7 @@ Move-In Day Cart Tracker: FastAPI + SQLAlchemy API on Render, PostgreSQL on Neon
 ## Commands
 
 - Backend: `source venv/bin/activate && uvicorn app.main:app --reload`
-- Tests: `pytest tests/ -v` (needs a reachable `DATABASE_URL` in `.env`, see README)
+- Tests: `pytest tests/ -v` (SQLite only; `tests/conftest.py` sets `DATABASE_URL`, so no `.env` or network needed)
 - Frontend (from `frontend/`): `npm run dev`, `npm run build`, `npm run lint`
 
 ## Conventions
@@ -14,7 +14,7 @@ Move-In Day Cart Tracker: FastAPI + SQLAlchemy API on Render, PostgreSQL on Neon
 - **Auth:** the admin router applies `require_admin` at router level; login lives on the separate public `login_router`. `RequireAdmin` in the frontend only hides the page; the API is the real gate.
 - **Public vs. admin API:** the public API is list, checkout, and return. Creating, editing, and deleting carts is admin-only (`/api/admin/carts`). Return and admin force-return share `close_session()` in `app/routers/carts.py`.
 - **"Session"** in `app/models.py` is a cart checkout, not a SQLAlchemy or login session.
-- **Schema changes:** tables come from `Base.metadata.create_all`, with no migrations. A column change to an existing table needs a manual change on Neon.
+- **Schema changes:** tables come from `Base.metadata.create_all` in the `lifespan` startup hook in `app/main.py`, with no migrations. A column change to an existing table needs a manual change on Neon.
 - **Tests:** SQLite via `app.dependency_overrides[get_db]`; admin env vars set with `monkeypatch`. Add a test for every new endpoint and failure path.
 - **Frontend:** plain CSS, no component library. API calls use `import.meta.env.VITE_API_URL`.
 

@@ -73,7 +73,7 @@ The app runs on http://localhost:5173, the origin the API's CORS settings allow 
 pytest tests/ -v
 ```
 
-The tests run against their own SQLite database. Importing the app still runs `create_all` against `DATABASE_URL`, though, so the database in the root `.env` must be reachable.
+The tests use their own SQLite database (set in `tests/conftest.py`), so they need no `.env` and no network access.
 
 ## Project structure
 

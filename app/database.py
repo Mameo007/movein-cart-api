@@ -5,7 +5,9 @@ from dotenv import load_dotenv
 
 # Load the database password
 load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL")
+# No default on purpose: a missing URL should crash at startup, not silently
+# fall back to a local database that Render wipes on every redeploy
+DATABASE_URL = os.environ["DATABASE_URL"]
 
 
 # Setup the Database Engine
