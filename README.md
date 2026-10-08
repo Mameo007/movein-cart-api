@@ -98,6 +98,9 @@ cart-api/
 │       ├── sessions.js         # Overdue check for a checkout
 │       ├── time.js             # Formatting and input conversion in the site timezone
 │       └── components/         # CartList, CheckoutForm, Admin* pages, RequireAdmin guard
+├── docs/
+│   ├── requirements/           # Glossary, business rules, open issues
+│   └── design/                 # Architecture, and one design per feature (overdue, notifications)
 ├── tests/
 │   └── test_carts.py           # API tests against an isolated SQLite database
 ├── .github/workflows/test.yml  # CI: test, then deploy to Render
