@@ -1,7 +1,7 @@
 # Architectural design
 
 **Project:** Move-In Day Cart Tracker
-**Version:** 0.1
+**Version:** 0.2
 
 The one map of the whole system: its parts, the external systems it talks to, and the decisions
 that are expensive to change. How a single feature works inside it is a design-of-record in this
@@ -26,6 +26,7 @@ Business rules (`BR-*`) and open issues (`OI-*`) are cited from [docs/requiremen
 | Version | Date | Change |
 |---|---|---|
 | 0.1 | 2026-10-08 | First version, written from the code at `e38545f` after M1 to M4 shipped |
+| 0.2 | 2026-10-09 | Checked against the running API; corrected `TD-silent-frontend-errors` and 8.2.2 |
 
 ---
 
@@ -231,7 +232,8 @@ clock (`TD-no-clock-injection`).
 
 Routes raise FastAPI's `HTTPException`, so every error is `{"detail": "..."}` with `404` for a missing
 record, `400` for a rule the request breaks, `401` for a missing or bad token, and `422` from
-Pydantic for a malformed body. The SPA logs failures to the console and shows the user nothing
+Pydantic for a malformed body. The admin cart screen (`AdminCarts.jsx`) shows the API's `detail`.
+Every other screen logs failures to the console and shows the user nothing
 (`TD-silent-frontend-errors`).
 
 #### 8.2.3 API conventions
@@ -353,7 +355,7 @@ The quality goals in section 1.2 are the overview.
 | `TD-no-clock-injection` | Debt | `utc_now()` can't be set from a test, so time-based tests rely on the API accepting past due times. | Patch `utc_now` where a test needs a fixed clock. | `OI-5`, [overdue.md](overdue.md#tests) |
 | `TD-resident-data-kept-forever` | Debt | Residents' names, phone numbers, and room numbers are never deleted unless their cart is. | A cleanup after move-in, or an admin "clear history" action. | 8.1 |
 | `TD-ci-after-merge` | Debt | Tests run on push to `main`, not on pull requests, so a failing change is merged before anyone sees it fail. The deploy is still blocked. | Add `pull_request` to the workflow's triggers, and keep the deploy step on `main` only. | 7 |
-| `TD-silent-frontend-errors` | Debt | A failed checkout or return only logs to the console. The RA sees nothing happen. | Show the API's `detail` message on the page. | 8.2.2 |
+| `TD-silent-frontend-errors` | Debt | A failed checkout or return, due-time change, or force return only logs to the console. The RA or admin sees nothing happen. Only `AdminCarts.jsx` shows the API's `detail`. | Show the API's `detail` message on the page, as `AdminCarts.jsx` does. | 8.2.2 |
 
 ## 12. Glossary
 

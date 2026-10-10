@@ -121,6 +121,10 @@ checkout with a future time and move it into the past with the admin `PATCH`.
 | Auth | integration | No token: `401` |
 | Bad value | integration | `overdue=maybe`: `422` |
 
+Today the API ignores query parameters it doesn't know, so `?overdue=true` returns `200` with
+every active checkout (checked against the running API on 2026-10-09). Deploy the API change before
+the frontend change, or every active checkout shows as overdue with no error.
+
 The frontend has no automated tests. The page is checked by hand: a checkout due one minute from
 now turns red within 30 seconds of its due time, without a reload.
 
@@ -135,3 +139,4 @@ as planned; it becomes `built` when this ships.
 - `OI-3`: grace period.
 - `OI-5`: past due times at checkout; changes how the tests make an overdue checkout.
 - Accepted risk: a red row lags the due time by up to 30 seconds.
+- Deploy order: the API first (see [Tests](#tests)). A frontend that ships first marks every active checkout overdue.
