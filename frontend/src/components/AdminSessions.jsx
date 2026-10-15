@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { isOverdue } from '../sessions'
-import { formatTime, toInputValue } from '../time'
+import { formatTime, toInputValue, toInstant } from '../time'
 
 const QUICK_EXTENDS = [15, 30, 60]
 
@@ -30,6 +30,7 @@ function AdminSessions({ sessions, now, timezone, adminFetch, onChange }) {
             .catch(error => console.error(error))
     }
 
+    // dueAt is always a UTC instant, so the API never reads it in a different zone than the one shown
     function updateDue(sessionId, dueAt) {
         adminFetch(`/api/admin/sessions/${sessionId}`, {
             method: 'PATCH',
@@ -51,7 +52,6 @@ function AdminSessions({ sessions, now, timezone, adminFetch, onChange }) {
 
     // Extend from whichever is later, the due time or now -- adding 15 minutes
     // to a cart that's an hour overdue would still leave it overdue.
-    // Sent as an exact UTC instant, so the API doesn't reinterpret it in the site zone.
     function handleQuickExtend(session, minutes) {
         const base = Math.max(new Date(session.due_at), now)
         updateDue(session.id, new Date(base + minutes * 60000).toISOString())
@@ -102,8 +102,8 @@ function AdminSessions({ sessions, now, timezone, adminFetch, onChange }) {
                                     onChange={e => setDueEdits({ ...dueEdits, [session.id]: e.target.value })}
                                 />
                                 <button
-                                    onClick={() => updateDue(session.id, dueEdits[session.id])}
-                                    disabled={!(session.id in dueEdits)}
+                                    onClick={() => updateDue(session.id, toInstant(dueEdits[session.id], timezone))}
+                                    disabled={!dueEdits[session.id]}
                                 >
                                     Update Due Time
                                 </button>

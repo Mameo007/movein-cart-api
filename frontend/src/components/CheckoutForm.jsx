@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import {useState, useEffect} from 'react'
-import { timezoneLabel } from '../time'
+import { timezoneLabel, toInstant } from '../time'
 
 function CheckoutForm() {
 
@@ -15,7 +15,8 @@ function CheckoutForm() {
     })
     const [timezone, setTimezone] = useState(null)
 
-    // The API reads the typed due time in the site's timezone, so say which one that is
+    // The typed due time is read in this zone here, not on the server, so a timezone
+    // change while the form is open can't move it away from what the label said
     useEffect(() => {
         fetch(`${import.meta.env.VITE_API_URL}/api/settings`)
             .then(response => response.json())
@@ -30,7 +31,7 @@ function CheckoutForm() {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(formData)
+            body: JSON.stringify({ ...formData, due_at: toInstant(formData.due_at, timezone) })
         }).then(response => {
             if (response.ok) {
                 navigate('/')
@@ -48,7 +49,7 @@ function CheckoutForm() {
             <input type="text" placeholder="Room Number" value={formData.room_number} onChange={e => setFormData({...formData, room_number: e.target.value})} required />
             {timezone && <span>Due time ({timezoneLabel(timezone)}):</span>}
             <input type="datetime-local" placeholder="Due At" value={formData.due_at} onChange={e => setFormData({...formData, due_at: e.target.value})} required />
-            <button type="submit">Checkout</button>
+            <button type="submit" disabled={!timezone}>Checkout</button>
         </form>
     )
 }
