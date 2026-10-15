@@ -65,7 +65,7 @@ All planned in [organizations.md](../design/organizations.md), not built.
 |---|---|---|---|
 | `BR-organization-owns-carts` | Every cart belongs to exactly one organization, and so does each of its checkouts. Cart numbers are unique within an organization. | Team decision (2026-10-15, `OI-17`) | Planned |
 | `BR-organization-created-by-owner` | Only the owner creates organizations, with `python -m app.create_organization`. There is no signup. | Team decision (2026-10-15, `OI-17`) | Planned |
-| `BR-organization-link` | The desk reaches its cart list at the organization's link, `/<slug>`. Still no desk login (`BR-desk-no-login`). | Team decision (2026-10-15, `OI-17`) | Planned |
+| `BR-organization-link` | The desk reaches its cart list at the organization's link, `/<slug>`. The bare site goes to the browser's remembered organization, or asks for the slug. No page lists organizations. Still no desk login (`BR-desk-no-login`). | Team decision (2026-10-15, `OI-17`) | Planned |
 | `BR-admin-own-organization` | An admin logs in with an organization's slug and password, and sees and changes only that organization's carts, checkouts, and timezone. | Team decision (2026-10-15, `OI-18`) | Planned |
 | `BR-admin-password-hashed` | Each organization's admin password is stored only as a bcrypt hash in the database, at least 12 characters, and changeable by its admin. | Team decision (2026-10-15, `OI-18`) | Planned |
 

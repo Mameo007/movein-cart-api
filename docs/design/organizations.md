@@ -2,7 +2,7 @@
 
 **Area:** Organizations, timezone per organization, admin login per organization
 
-> **Realizes:** `OI-6`, `OI-17`, `OI-18`; `BR-organization-owns-carts`, `BR-admin-own-organization`, `BR-admin-password-hashed`, `BR-organization-created-by-owner`, `BR-organization-link`
+> **Realizes:** `OI-6`, `OI-17`, `OI-18`, `OI-19`; `BR-organization-owns-carts`, `BR-admin-own-organization`, `BR-admin-password-hashed`, `BR-organization-created-by-owner`, `BR-organization-link`
 > **Depends on:** `BR-store-utc`, `BR-due-times-sent-as-instants`, `BR-desk-no-login`, `BR-cart-admin-only`
 > **See:** [business rules](../requirements/business-rules.md), [architecture](architectural-design.md), [open issues](../requirements/OPEN-ISSUES.md)
 > **Designed against:** `e61b2d9`
@@ -63,15 +63,50 @@ after this. Screens keep today's plain styling.
 **Frontend**
 
 - `App.jsx` (**changed**): `/:organizationSlug` shows `CartList`, and
-  `/:organizationSlug/checkout/:cartId` shows `CheckoutForm`. `/` shows a short page asking for the
-  organization's link. `/admin/login` and `/admin` stay.
+  `/:organizationSlug/checkout/:cartId` shows `CheckoutForm`. `/` shows `Home`. `/admin/login` and
+  `/admin` stay.
+- `Home.jsx` (**new**): where the bare site lands (see [Landing](#landing)). Sends the browser to
+  its remembered organization, or asks for the slug.
+- `organization.js` (**new**): reads, saves, and clears the remembered slug in `localStorage`
+  (`organization_slug`). Every screen that knows the organization goes through it, so there is one
+  remembered organization per browser.
 - `CartList.jsx`, `CheckoutForm.jsx` (**changed**): read the slug from the URL and call the
-  organization endpoints. An unknown slug shows the API's `detail`.
-- `AdminLogin.jsx` (**changed**): an Organization field above the password. It remembers the last
-  slug in `localStorage` (`organization_slug`) so the admin doesn't retype it.
-- `AdminPage.jsx` (**changed**): shows the organization's name, and reads the timezone from
-  `GET /api/admin/organization` instead of `/api/settings`.
+  organization endpoints. `CartList` remembers the slug once the organization loads, shows the
+  organization's name, and has a Switch Organization link. An unknown slug shows the API's `detail`
+  and forgets the remembered slug.
+- `AdminLogin.jsx` (**changed**): an Organization field above the password, filled in from the
+  remembered slug.
+- `AdminPage.jsx` (**changed**): shows the organization's name and its desk link with a Copy Link
+  button, and reads the timezone from `GET /api/admin/organization` instead of `/api/settings`.
 - `AdminSettings.jsx` (**changed**): adds a Change Password form.
+
+## Landing
+
+Someone opening the app has to end up in their organization without seeing anyone else's. In
+order:
+
+1. **The organization's link, `/<slug>`.** The normal way in. The admin copies it from the admin
+   page and sends it to the desk, or bookmarks it on the desk computer.
+2. **`/` with a remembered organization.** Goes straight to `/<slug>`. The browser remembers the
+   last organization whose cart list loaded, or whose admin logged in.
+3. **`/` with nothing remembered.** A Find Your Organization form with one field, the slug. It
+   checks the slug with `GET /api/organizations/{organization_slug}`, then remembers it and goes
+   there. An unknown slug shows the API's `detail`.
+4. **Wrong organization on a shared device.** Switch Organization on the cart list forgets the
+   remembered slug and returns to the form.
+
+```mermaid
+flowchart TD
+    open([Opens the app]) --> path{Path?}
+    path -- "/tcu" --> load[GET /api/organizations/tcu]
+    path -- "/" --> saved{Organization remembered?}
+    saved -- yes --> load
+    saved -- no --> form[Find Your Organization form]
+    form -- slug typed --> load
+    load -- 200 --> list[Cart list for tcu, slug remembered]
+    load -- 404 --> forget[Forget the slug, show the form with the API's detail]
+    list -- Switch Organization --> forget2[Forget the slug] --> form
+```
 
 ## Sequence
 
@@ -153,8 +188,13 @@ build and protect for something done a few times a year.
 `RISK-open-desk-api` scoped to one organization. Rejected: a desk code (an extra step at a busy desk)
 and a desk login (the same, plus passwords for every RA).
 
-**The login form takes a typed slug, not a dropdown.** A dropdown needs a public list of every
-organization, which tells anyone who the customers are.
+**The login form and Find Your Organization take a typed slug, not a dropdown.** A dropdown needs
+a public list of every organization, which tells anyone who the customers are.
+
+**The browser remembers one organization.** A desk device almost always serves one organization, so
+the bare site going straight to it saves a step, and Switch Organization covers the exceptions.
+Rejected: a subdomain per organization (`tcu.<app>`), which needs wildcard DNS and a certificate per
+organization on Vercel for the same result as `/tcu`.
 
 **Checkout and return keep their paths.** The cart id already says which organization the cart is
 in. Rejected: `/api/organizations/{organization_slug}/carts/{cart_id}/checkout`, which repeats what
@@ -193,19 +233,16 @@ erDiagram
 - `carts`: unique on `(organization_id, cart_number)`, replacing the unique index on `cart_number`.
 - `settings`: dropped.
 
-**Manual change on Neon.** `create_all` makes the `organizations` table but doesn't change `carts`
-(see `CLAUDE.md`). In order, before the new API deploys:
+**Manual change on Neon.** The data on Neon is test data (`OI-19`), so nothing is migrated:
+the tables are dropped and `create_all` rebuilds them in the new shape (see `CLAUDE.md`). In order,
+when no desk is open:
 
-1. Run `python -m app.create_organization` against Neon for the organization that keeps the
-   existing data (`OI-19`). Use the timezone currently in `settings`.
-2. In one transaction: add `carts.organization_id` referencing `organizations(id)`, set it to that
-   organization's id for every row, make it `NOT NULL`, drop the index `ix_carts_cart_number`,
-   create a unique index on `(organization_id, cart_number)`, and drop `settings`.
-3. Deploy the API, then the frontend. Between the two, the old frontend calls the removed
-   `GET /api/carts` and shows no carts, so deploy when no desk is open.
-4. Remove `ADMIN_PASSWORD` from Render.
-
-The exact SQL goes in the pull request that builds this, tested first on a local Postgres.
+1. Drop `sessions`, `carts`, and `settings` on Neon, in that order because of the foreign key.
+2. Deploy the API. Its startup creates `organizations`, `carts`, and `sessions`.
+3. Run `python -m app.create_organization` against Neon for each real organization.
+4. Deploy the frontend. Between steps 2 and 4, the old frontend calls the removed
+   `GET /api/carts` and shows no carts.
+5. Remove `ADMIN_PASSWORD` from Render.
 
 ## Reuse & cross-cutting
 
@@ -236,7 +273,8 @@ tests.
 | Script | unit | `create_organization` refuses a reserved or duplicate slug and an unknown timezone |
 
 The frontend has no automated tests. Checked by hand: log in to two organizations in two browsers,
-and each sees only its own carts and timezone.
+and each sees only its own carts and timezone. Opening `/` goes to the remembered organization;
+in a private window it shows the form; Switch Organization and an unknown slug both return to it.
 
 ## Changes to the architecture-of-record
 
@@ -251,7 +289,6 @@ and each sees only its own carts and timezone.
 
 ## Open questions & risks
 
-- `OI-19`: which organization the existing data on Neon belongs to, or whether to start empty.
 - `OI-10`: a checkout still doesn't record its timezone.
 - Risk: a forgotten password needs the owner to run the script. Fine for a few organizations.
 - Risk: login has no rate limit, so a password can be guessed online. bcrypt slows each guess, and

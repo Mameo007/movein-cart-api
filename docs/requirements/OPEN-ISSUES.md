@@ -15,11 +15,8 @@ the team decides it and records the rule as a team decision.
 
 Ordered by the cost of a wrong guess:
 
-1. **`OI-19`, what happens to the data already on Neon.** It's the first step of the manual
-   schema change in [organizations.md](../design/organizations.md#data-model), which comes before
-   #17.
-2. **`OI-4`, who gets emailed.** It blocks all of #17. Residents give no email address today.
-3. The rest are local to one screen or one rule. `OI-12` to `OI-16` are cleanup with an obvious
+1. **`OI-4`, who gets emailed.** It blocks all of #17. Residents give no email address today.
+2. The rest are local to one screen or one rule. `OI-12` to `OI-16` are cleanup with an obvious
    answer, best done together in one `fix/text-consistency` pull request.
 
 ## Open
@@ -38,7 +35,6 @@ Ordered by the cost of a wrong guess:
 | `OI-14` | Rename `get_all_carts` or `get_sessions` so they match? One says "all" and the other doesn't, for the same kind of list endpoint. | Python names only. The URLs don't change, and the tests call the endpoints over HTTP, so nothing outside the module notices. | Team | 2026-10-08 |
 | `OI-15` | Rename `admin_login` to fit the `verb_resource` pattern every other route handler uses? | Same as `OI-14`: a function name, not a URL. | Team | 2026-10-08 |
 | `OI-16` | Delete the Vite starter-template leftovers? `frontend/src/App.css` (`.counter`, `.hero`, `.ticks`, and more) isn't imported anywhere; `.counter` in `index.css` is unused; `src/assets/hero.png`, `react.svg`, `vite.svg`, and `public/icons.svg` aren't referenced. `favicon.svg` and `#root` are used and stay. | Dead files that look like part of the app to anyone reading it. Check `npm run build` and the deployed site after deleting. | Team | 2026-10-08 |
-| `OI-19` | Which organization do the carts and checkouts already on Neon belong to, and under what name and slug? Or are they test data to drop? | Adding organizations needs every existing cart in one ([organizations.md](../design/organizations.md#data-model)). Keeping it means creating that organization first; dropping it makes the schema change a fresh start. | Team | 2026-10-15 |
 
 ## Timezone handling
 
@@ -76,3 +72,4 @@ technical debt (`TD-single-site-timezone`).
 | `OI-8` | Should every displayed time say which timezone it is in? | Yes. Every shown time ends with the zone's short name, like `CDT`. | Team | 2026-10-15 | `BR-times-show-zone` |
 | `OI-17` | What is an organization, and how does the desk reach its cart list? | Anyone running carts, such as a college's move-in desk or a company. The owner creates each one. The desk opens the organization's link, like `/tcu`, with no login. | Team | 2026-10-15 | `BR-organization-owns-carts`, `BR-organization-created-by-owner`, `BR-organization-link`, [organizations.md](../design/organizations.md) |
 | `OI-18` | How does an admin log in to their own organization, and only theirs? | With the organization's slug and its password, picked on the login page. Each password is stored hashed in the database, not in the environment. | Team | 2026-10-15 | `BR-admin-own-organization`, `BR-admin-password-hashed`, [organizations.md](../design/organizations.md) |
+| `OI-19` | Which organization do the carts and checkouts already on Neon belong to? | None. They are test data, dropped during the schema change. | Team | 2026-10-15 | [organizations.md](../design/organizations.md#data-model) |
