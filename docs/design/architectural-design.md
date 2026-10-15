@@ -27,6 +27,7 @@ Business rules (`BR-*`) and open issues (`OI-*`) are cited from [docs/requiremen
 |---|---|---|
 | 0.1 | 2026-10-08 | First version, written from the code at `e38545f` after M1 to M4 shipped |
 | 0.2 | 2026-10-09 | Checked against the running API; corrected `TD-silent-frontend-errors` and 8.2.2 |
+| 0.3 | 2026-10-15 | The SPA sends due times as instants (`OI-7`); removed `TD-wall-clock-due-times`; `OI-6` answered |
 
 ---
 
@@ -152,22 +153,23 @@ sequenceDiagram
     API-->>SPA: { timezone: "America/Chicago" }
     SPA-->>RA: Form, labelled "Due time (Central Daylight Time)"
     RA->>SPA: Resident's details, due 2:00 PM
-    SPA->>API: POST /api/carts/{id}/checkout, due_at "2026-08-20T14:00"
+    SPA->>SPA: toInstant: 14:00 Chicago is 19:00 UTC
+    SPA->>API: POST /api/carts/{id}/checkout, due_at "2026-08-20T19:00:00.000Z"
     alt cart missing
         API-->>SPA: 404
     else cart not AVAILABLE
         API-->>SPA: 400
     else
-        API->>DB: read site timezone
-        API->>API: to_utc: 14:00 Chicago is 19:00 UTC
+        API->>API: to_utc: already UTC, nothing to convert
         API->>DB: insert checkout, set cart IN_USE, commit
         API-->>SPA: 200, due_at "2026-08-20T19:00:00Z"
     end
     SPA-->>RA: Back to the cart list
 ```
 
-The site timezone is read twice, once when the form loads and again when the request arrives. If
-an admin changes it in between, the two disagree (`OI-7`, `TD-wall-clock-due-times`).
+The site timezone is read once, when the form loads, and the same zone labels the input and
+converts it. An admin changing it while the form is open can't move the due time
+(`BR-due-times-sent-as-instants`).
 
 ## 7. Deployment View
 
@@ -221,10 +223,12 @@ and is built into the SPA.
 
 Every timestamp is stored as naive UTC from `utc_now()`, never from a database default or
 `datetime.now()`. A time with no offset is a wall-clock time in the site timezone; a time with an
-offset is an exact instant; both go through `to_utc()`. Responses add a `Z` (`UTCDateTime`), and the
-SPA formats every time in the site timezone through `frontend/src/time.js`, never the browser's.
+offset is an exact instant; both go through `to_utc()`. The SPA only sends instants: `toInstant()`
+reads a typed time in the site timezone before it leaves the browser. Responses add a `Z`
+(`UTCDateTime`), and the SPA formats every time in the site timezone, with the zone named, through
+`frontend/src/time.js`, never the browser's.
 Why: a due time has to mean the same moment wherever the server, the database, or the viewer is
-(quality goal 1). Shown in: `app/timezones.py`, `app/schemas.py`. Known gaps: `OI-6` to `OI-11`,
+(quality goal 1). Shown in: `app/timezones.py`, `app/schemas.py`. Known gaps: `OI-9` to `OI-11`,
 summarized in [OPEN-ISSUES.md](../requirements/OPEN-ISSUES.md#timezone-handling). Tests can't set the
 clock (`TD-no-clock-injection`).
 
@@ -311,7 +315,8 @@ with the real one.
   is typed or shown.
 - **Rejected:** Storing local times, which change meaning when the timezone setting does. Using
   each browser's own timezone, which shows the same due time differently on two devices.
-- **Trade-off:** Exactly one timezone (`TD-single-site-timezone`, `OI-6`).
+- **Trade-off:** Exactly one timezone (`TD-single-site-timezone`), though `OI-6` decided on one per
+  organization.
 
 **`KD-neon-database`: PostgreSQL on Neon.** Accepted.
 - **Decision:** A Neon Postgres database, with `pool_pre_ping=True` because Neon closes idle
@@ -350,8 +355,7 @@ The quality goals in section 1.2 are the overview.
 | `RISK-concurrent-checkout` | Risk | Two RAs tap Checkout on the same cart at once. Both requests read `AVAILABLE`, both insert a checkout, and the cart has two active checkouts, breaking `BR-one-active-checkout`. Return then closes only one of them. | Make the status change conditional: `UPDATE carts SET status='IN_USE' WHERE id=? AND status='AVAILABLE'`, and refuse when no row changed. Or lock the row with `with_for_update()`. | `BR-one-active-checkout` |
 | `RISK-render-cold-start` | Risk | If the API is on Render's free plan, it spins down when idle, and the first request after that takes many seconds. The first RA of the morning sees a hung page. | Open the app once before the desk opens; or a paid plan for move-in week. | `KD-deployment-shape` |
 | `RISK-open-desk-api` | Risk | Anyone who finds the API's URL can check out or return any cart, or flood the list with checkouts. | Accepted for move-in day. If it's abused, a shared desk code like the admin password. | `BR-desk-no-login` |
-| `TD-single-site-timezone` | Debt | One timezone for the whole app. A second location can't be supported without a schema change. | Answer `OI-6` first. | `BR-site-timezone`, `OI-6` |
-| `TD-wall-clock-due-times` | Debt | The SPA sends due times as wall-clock text, and the API reads them in whatever the site timezone is when the request arrives. A timezone change while a form is open shifts the due time. | Send an instant with an offset from the SPA, which already knows the zone it labelled. | `OI-7` |
+| `TD-single-site-timezone` | Debt | One timezone for the whole app, but `OI-6` decided each organization picks its own. A second organization can't be supported without a schema change. | Add organizations, then move the timezone onto them. | `BR-site-timezone`, `OI-6`, `OI-17`, `OI-18` |
 | `TD-no-clock-injection` | Debt | `utc_now()` can't be set from a test, so time-based tests rely on the API accepting past due times. | Patch `utc_now` where a test needs a fixed clock. | `OI-5`, [overdue.md](overdue.md#tests) |
 | `TD-resident-data-kept-forever` | Debt | Residents' names, phone numbers, and room numbers are never deleted unless their cart is. | A cleanup after move-in, or an admin "clear history" action. | 8.1 |
 | `TD-ci-after-merge` | Debt | Tests run on push to `main`, not on pull requests, so a failing change is merged before anyone sees it fail. The deploy is still blocked. | Add `pull_request` to the workflow's triggers, and keep the deploy step on `main` only. | 7 |

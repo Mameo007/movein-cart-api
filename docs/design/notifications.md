@@ -89,5 +89,5 @@ both.
 
 - `OI-4`, `OI-11`: blocking.
 - `OI-3`: a grace period changes when an overdue email goes out.
-- `OI-7`: if due times can still be shifted by a timezone change, an email can state the wrong
-  time. Fix `OI-7` before #17.
+- `OI-17`: once organizations exist, an email uses its checkout's organization timezone, not one
+  global setting.

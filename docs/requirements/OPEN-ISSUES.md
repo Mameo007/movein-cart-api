@@ -15,13 +15,11 @@ the team decides it and records the rule as a team decision.
 
 Ordered by the cost of a wrong guess:
 
-1. **`OI-6`, one timezone or several.** A "yes" changes the data model, which means a manual
-   schema change on Neon, and every place a time is converted. Answer it before anything else
-   touches time.
-2. **`OI-7`, due times sent as wall-clock text.** A live bug, small to fix, and it widens if
-   #17 starts sending emails with the wrong time in them.
-3. **`OI-4`, who gets emailed.** It blocks all of #17. Residents give no email address today.
-4. The rest are local to one screen or one rule. `OI-12` to `OI-16` are cleanup with an obvious
+1. **`OI-17` and `OI-18`, what an organization is and how its admin logs in.** `OI-6` decided
+   on one timezone per organization, and the app has no organizations. Every table, query, and
+   the login change shape, with a manual schema change on Neon. Design it before #17.
+2. **`OI-4`, who gets emailed.** It blocks all of #17. Residents give no email address today.
+3. The rest are local to one screen or one rule. `OI-12` to `OI-16` are cleanup with an obvious
    answer, best done together in one `fix/text-consistency` pull request.
 
 ## Open
@@ -32,9 +30,6 @@ Ordered by the cost of a wrong guess:
 | `OI-3` | Is there a grace period before a checkout counts as overdue? | It changes one comparison in the overdue query (`BR-overdue-definition`), but also when #17 sends an overdue email. | Res-life | 2026-10-07 |
 | `OI-4` | Who gets emailed, about what, and when: the resident, the admin, or both; at checkout, shortly before the due time, or once overdue? | Blocks [notifications.md](../design/notifications.md) and #17. Residents give no email address (`BR-checkout-fields`), so emailing them means a new required field on the checkout form. | Res-life | 2026-10-07 |
 | `OI-5` | Should checkout reject a due time that is already past? | Today it's accepted and the checkout is overdue at once. Rejecting it is a new 400 on checkout, and the overdue tests then need another way to make a past-due checkout. | Team | 2026-10-07 |
-| `OI-6` | Will the app ever serve carts in more than one timezone at once, such as two campuses or one admin managing another site? | The site timezone is one `Setting` row (`BR-site-timezone`). More than one means a timezone per location or per cart: a schema change, a new admin screen, and a different timezone lookup on every write. See [Timezone handling](#timezone-handling). | Team, then res-life | 2026-10-08 |
-| `OI-7` | Should the frontend send every typed due time as an exact instant (with its UTC offset), so the API never interprets wall-clock text? | A form loaded before an admin changes the site timezone still sends wall-clock text, and the API reads it in the new zone. The due time moves by the difference between the zones, while the form's label showed the old one. | Team | 2026-10-08 |
-| `OI-8` | Should every displayed time say which timezone it is in? | The admin lists show "Due 8/20/26, 2:00 PM" with no zone. Someone viewing from another timezone reads it as their own local time. Only the checkout form and settings page name the zone. | Team | 2026-10-08 |
 | `OI-9` | What should happen to a due time typed into a daylight-saving gap or overlap, like 2:30 AM on the night clocks spring forward, or 1:30 AM on the night they fall back? | `to_utc()` silently picks one: the first 1:30 AM, and 3:30 AM for the 2:30 AM that doesn't exist. Nobody is told. Unlikely on move-in day, but it's undocumented. | Team | 2026-10-08 |
 | `OI-10` | Should a checkout remember the timezone it was made in? | History is shown in the current site timezone. After a timezone change, a past checkout's due time displays differently from what the resident was told at the desk. | Team | 2026-10-08 |
 | `OI-11` | Which timezone do emails use, and where is a time formatted on the server? | Every time is formatted in the browser today (`frontend/src/time.js`). An email from #17 is formatted by the API, which has no formatter and no timezone label yet. | Team | 2026-10-08 |
@@ -43,10 +38,13 @@ Ordered by the cost of a wrong guess:
 | `OI-14` | Rename `get_all_carts` or `get_sessions` so they match? One says "all" and the other doesn't, for the same kind of list endpoint. | Python names only. The URLs don't change, and the tests call the endpoints over HTTP, so nothing outside the module notices. | Team | 2026-10-08 |
 | `OI-15` | Rename `admin_login` to fit the `verb_resource` pattern every other route handler uses? | Same as `OI-14`: a function name, not a URL. | Team | 2026-10-08 |
 | `OI-16` | Delete the Vite starter-template leftovers? `frontend/src/App.css` (`.counter`, `.hero`, `.ticks`, and more) isn't imported anywhere; `.counter` in `index.css` is unused; `src/assets/hero.png`, `react.svg`, `vite.svg`, and `public/icons.svg` aren't referenced. `favicon.svg` and `#root` are used and stay. | Dead files that look like part of the app to anyone reading it. Check `npm run build` and the deployed site after deleting. | Team | 2026-10-08 |
+| `OI-17` | What is an organization, and what belongs to one? Carts, checkouts, and the timezone are global today. How does an RA's cart list know which organization it is for: a path like `/<org-slug>`, a desk code, or something else? | `OI-6` gives each organization its own timezone, and nothing in the app has an organization yet. Adding one is a manual schema change on Neon for `carts`, `sessions`, and `settings`, and every query has to filter by it. Needs a design doc in `docs/design/` before any code. | Team | 2026-10-15 |
+| `OI-18` | How does an admin log in to their own organization, and only theirs? | One shared password (`KD-shared-admin-password`) can't tell organizations apart. A password per organization or real admin accounts both change `app/auth.py` and what the token carries, and an admin must never see another organization's checkouts. | Team | 2026-10-15 |
 
 ## Timezone handling
 
-What works, and why it isn't finished. `OI-6` to `OI-11` are the individual questions.
+What works, and why it isn't finished. `OI-9` to `OI-11`, `OI-17`, and `OI-18` are the
+individual questions.
 
 **What works.** Storage and comparison are correct and don't depend on where the server or the
 browser is: every time is stored as UTC (`BR-store-utc`), "now" is `utc_now()`, and the API sends
@@ -54,26 +52,28 @@ times with a `Z`. Changing the site timezone never moves a due time. Tests cover
 both ways (`test_checkout_due_at_uses_site_timezone`,
 `test_admin_update_due_at_with_offset_ignores_site_timezone`).
 
-**What doesn't.** The app treats the timezone as a single global setting that is read again on
-every request and never recorded with the data:
+Since 2026-10-15 the SPA reads a typed due time in the zone it showed and sends a UTC instant
+(`OI-7`), and every displayed time names its zone (`OI-8`).
 
-- **Interpretation happens late, on the server** (`OI-7`). The checkout form and the admin's due-time
-  editor send `2026-08-20T14:00`, and the API decides which zone that means when the request
-  arrives, not when it was typed.
-- **Display has no zone label** (`OI-8`). The browser's own timezone is ignored, which is right for one
-  building, but nothing tells a viewer elsewhere that the times aren't theirs.
+**What doesn't.** The app treats the timezone as a single global setting that is never recorded
+with the data:
+
 - **Data doesn't record its timezone** (`OI-10`). A checkout stores instants only, so a timezone
   change rewrites how all of history reads.
-- **There is one timezone** (`OI-6`). Supporting a second is a data-model change, not a setting.
+- **There is one timezone, and there should be one per organization** (`OI-6`). That needs
+  organizations first (`OI-17`, `OI-18`): a data-model change, not a setting.
 - **Edge cases are resolved silently** (`OI-9`), and **the server can't format a time** (`OI-11`).
 
-**Suggested order.** Answer `OI-6` first, because "yes" changes the shape of every other fix. If
-the answer is "one timezone", `OI-7` and `OI-8` are small frontend changes worth doing before #17,
-and `OI-9` and `OI-10` can stay open as accepted limitations. The architecture records these as
-technical debt (`TD-single-site-timezone`, `TD-wall-clock-due-times`).
+**Suggested order.** Design organizations (`OI-17`, `OI-18`) next, since the timezone moves onto
+them. Decide `OI-10` in the same design: a checkout's organization may be enough to know its zone.
+`OI-9` can stay open as an accepted limitation. The architecture records the single timezone as
+technical debt (`TD-single-site-timezone`).
 
 ## Resolved
 
 | ID | Question | Answer | Answered by | Date | Filed in |
 |---|---|---|---|---|---|
 | `OI-1` | Should the API decide what counts as overdue, or is the frontend's check enough? | The API decides, through `GET /api/admin/sessions?overdue=true`, so every device shows the same carts as overdue. | Team | 2026-10-08 | `BR-overdue-server-decides`, [overdue.md](../design/overdue.md) |
+| `OI-6` | Will the app ever serve carts in more than one timezone at once? | Yes. Each organization's admin picks its organization's timezone, so the app needs one timezone per organization. Not built: the app has no organizations yet (`OI-17`, `OI-18`). | Team | 2026-10-15 | `BR-site-timezone`, `TD-single-site-timezone` |
+| `OI-7` | Should the frontend send every typed due time as an exact instant? | Yes. The SPA reads what was typed in the zone it labelled and sends a UTC instant. The API still accepts wall-clock text. | Team | 2026-10-15 | `BR-due-times-sent-as-instants` |
+| `OI-8` | Should every displayed time say which timezone it is in? | Yes. Every shown time ends with the zone's short name, like `CDT`. | Team | 2026-10-15 | `BR-times-show-zone` |

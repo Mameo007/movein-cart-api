@@ -53,7 +53,9 @@ is not enforced, because the public API can be called directly.
 |---|---|---|---|
 | `BR-shared-admin-password` | There is one shared admin password. Logging in gives an admin token valid for 8 hours. | Team decision | `app/auth.py` |
 | `BR-store-utc` | Every timestamp is stored as UTC. The site timezone only affects how times are typed in and shown, so changing it never moves a due time. | Team decision | `to_utc()`, `UTCDateTime` |
-| `BR-site-timezone` | The app has one site timezone, a valid IANA name, default `America/Chicago`. A due time typed without an offset means that wall-clock time in the site timezone. | Team decision | `TimezoneUpdate` (422), `to_utc()`; the gaps are `OI-6` to `OI-11` |
+| `BR-site-timezone` | The app has one site timezone, a valid IANA name, default `America/Chicago`. A due time sent without an offset means that wall-clock time in the site timezone. Each organization is to get its own timezone (`OI-6`), once organizations exist (`OI-17`). | Team decision | `TimezoneUpdate` (422), `to_utc()`; the gaps are `OI-9` to `OI-11` |
+| `BR-due-times-sent-as-instants` | The SPA sends every due time as a UTC instant, reading what was typed in the timezone shown beside the input. A timezone change while a form is open can't move the due time. | Team decision (2026-10-15, `OI-7`) | `toInstant()` in `frontend/src/time.js` |
+| `BR-times-show-zone` | Every time the app shows names its timezone, like "8/20/26, 2:00 PM CDT". | Team decision (2026-10-15, `OI-8`) | `formatTime()` in `frontend/src/time.js` |
 
 ## Revision history
 
@@ -61,3 +63,4 @@ is not enforced, because the public API can be called directly.
 |---|---|
 | 2026-10-07 | Initial rules, written from the code at `e38545f` |
 | 2026-10-08 | Added `BR-overdue-server-decides` (`OI-1`); moved open questions to `OPEN-ISSUES.md`; numeric IDs replaced with slugs |
+| 2026-10-15 | Added `BR-due-times-sent-as-instants` (`OI-7`) and `BR-times-show-zone` (`OI-8`); `BR-site-timezone` notes one timezone per organization (`OI-6`) |
