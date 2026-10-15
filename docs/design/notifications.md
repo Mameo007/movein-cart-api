@@ -89,5 +89,5 @@ both.
 
 - `OI-4`, `OI-11`: blocking.
 - `OI-3`: a grace period changes when an overdue email goes out.
-- `OI-17`: once organizations exist, an email uses its checkout's organization timezone, not one
+- [organizations.md](organizations.md): once built, an email uses its checkout's organization timezone, not one
   global setting.

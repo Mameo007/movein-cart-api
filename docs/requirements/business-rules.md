@@ -57,6 +57,18 @@ is not enforced, because the public API can be called directly.
 | `BR-due-times-sent-as-instants` | The SPA sends every due time as a UTC instant, reading what was typed in the timezone shown beside the input. A timezone change while a form is open can't move the due time. | Team decision (2026-10-15, `OI-7`) | `toInstant()` in `frontend/src/time.js` |
 | `BR-times-show-zone` | Every time the app shows names its timezone, like "8/20/26, 2:00 PM CDT". | Team decision (2026-10-15, `OI-8`) | `formatTime()` in `frontend/src/time.js` |
 
+## Organizations
+
+All planned in [organizations.md](../design/organizations.md), not built.
+
+| ID | Rule | Source | Enforced in |
+|---|---|---|---|
+| `BR-organization-owns-carts` | Every cart belongs to exactly one organization, and so does each of its checkouts. Cart numbers are unique within an organization. | Team decision (2026-10-15, `OI-17`) | Planned |
+| `BR-organization-created-by-owner` | Only the owner creates organizations, with `python -m app.create_organization`. There is no signup. | Team decision (2026-10-15, `OI-17`) | Planned |
+| `BR-organization-link` | The desk reaches its cart list at the organization's link, `/<slug>`. Still no desk login (`BR-desk-no-login`). | Team decision (2026-10-15, `OI-17`) | Planned |
+| `BR-admin-own-organization` | An admin logs in with an organization's slug and password, and sees and changes only that organization's carts, checkouts, and timezone. | Team decision (2026-10-15, `OI-18`) | Planned |
+| `BR-admin-password-hashed` | Each organization's admin password is stored only as a bcrypt hash in the database, at least 12 characters, and changeable by its admin. | Team decision (2026-10-15, `OI-18`) | Planned |
+
 ## Revision history
 
 | Date | Description |
@@ -64,3 +76,4 @@ is not enforced, because the public API can be called directly.
 | 2026-10-07 | Initial rules, written from the code at `e38545f` |
 | 2026-10-08 | Added `BR-overdue-server-decides` (`OI-1`); moved open questions to `OPEN-ISSUES.md`; numeric IDs replaced with slugs |
 | 2026-10-15 | Added `BR-due-times-sent-as-instants` (`OI-7`) and `BR-times-show-zone` (`OI-8`); `BR-site-timezone` notes one timezone per organization (`OI-6`) |
+| 2026-10-15 | Added the planned organization rules (`OI-17`, `OI-18`) |

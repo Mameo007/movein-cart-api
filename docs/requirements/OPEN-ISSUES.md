@@ -15,9 +15,9 @@ the team decides it and records the rule as a team decision.
 
 Ordered by the cost of a wrong guess:
 
-1. **`OI-17` and `OI-18`, what an organization is and how its admin logs in.** `OI-6` decided
-   on one timezone per organization, and the app has no organizations. Every table, query, and
-   the login change shape, with a manual schema change on Neon. Design it before #17.
+1. **`OI-19`, what happens to the data already on Neon.** It's the first step of the manual
+   schema change in [organizations.md](../design/organizations.md#data-model), which comes before
+   #17.
 2. **`OI-4`, who gets emailed.** It blocks all of #17. Residents give no email address today.
 3. The rest are local to one screen or one rule. `OI-12` to `OI-16` are cleanup with an obvious
    answer, best done together in one `fix/text-consistency` pull request.
@@ -38,13 +38,11 @@ Ordered by the cost of a wrong guess:
 | `OI-14` | Rename `get_all_carts` or `get_sessions` so they match? One says "all" and the other doesn't, for the same kind of list endpoint. | Python names only. The URLs don't change, and the tests call the endpoints over HTTP, so nothing outside the module notices. | Team | 2026-10-08 |
 | `OI-15` | Rename `admin_login` to fit the `verb_resource` pattern every other route handler uses? | Same as `OI-14`: a function name, not a URL. | Team | 2026-10-08 |
 | `OI-16` | Delete the Vite starter-template leftovers? `frontend/src/App.css` (`.counter`, `.hero`, `.ticks`, and more) isn't imported anywhere; `.counter` in `index.css` is unused; `src/assets/hero.png`, `react.svg`, `vite.svg`, and `public/icons.svg` aren't referenced. `favicon.svg` and `#root` are used and stay. | Dead files that look like part of the app to anyone reading it. Check `npm run build` and the deployed site after deleting. | Team | 2026-10-08 |
-| `OI-17` | What is an organization, and what belongs to one? Carts, checkouts, and the timezone are global today. How does an RA's cart list know which organization it is for: a path like `/<org-slug>`, a desk code, or something else? | `OI-6` gives each organization its own timezone, and nothing in the app has an organization yet. Adding one is a manual schema change on Neon for `carts`, `sessions`, and `settings`, and every query has to filter by it. Needs a design doc in `docs/design/` before any code. | Team | 2026-10-15 |
-| `OI-18` | How does an admin log in to their own organization, and only theirs? | One shared password (`KD-shared-admin-password`) can't tell organizations apart. A password per organization or real admin accounts both change `app/auth.py` and what the token carries, and an admin must never see another organization's checkouts. | Team | 2026-10-15 |
+| `OI-19` | Which organization do the carts and checkouts already on Neon belong to, and under what name and slug? Or are they test data to drop? | Adding organizations needs every existing cart in one ([organizations.md](../design/organizations.md#data-model)). Keeping it means creating that organization first; dropping it makes the schema change a fresh start. | Team | 2026-10-15 |
 
 ## Timezone handling
 
-What works, and why it isn't finished. `OI-9` to `OI-11`, `OI-17`, and `OI-18` are the
-individual questions.
+What works, and why it isn't finished. `OI-9` to `OI-11` are the individual questions.
 
 **What works.** Storage and comparison are correct and don't depend on where the server or the
 browser is: every time is stored as UTC (`BR-store-utc`), "now" is `utc_now()`, and the API sends
@@ -60,13 +58,12 @@ with the data:
 
 - **Data doesn't record its timezone** (`OI-10`). A checkout stores instants only, so a timezone
   change rewrites how all of history reads.
-- **There is one timezone, and there should be one per organization** (`OI-6`). That needs
-  organizations first (`OI-17`, `OI-18`): a data-model change, not a setting.
+- **There is one timezone, and there should be one per organization** (`OI-6`). Designed in
+  [organizations.md](../design/organizations.md), not built.
 - **Edge cases are resolved silently** (`OI-9`), and **the server can't format a time** (`OI-11`).
 
-**Suggested order.** Design organizations (`OI-17`, `OI-18`) next, since the timezone moves onto
-them. Decide `OI-10` in the same design: a checkout's organization may be enough to know its zone.
-`OI-9` can stay open as an accepted limitation. The architecture records the single timezone as
+**Suggested order.** Build organizations next, since the timezone moves onto them. `OI-9` and
+`OI-10` can stay open as accepted limitations. The architecture records the single timezone as
 technical debt (`TD-single-site-timezone`).
 
 ## Resolved
@@ -74,6 +71,8 @@ technical debt (`TD-single-site-timezone`).
 | ID | Question | Answer | Answered by | Date | Filed in |
 |---|---|---|---|---|---|
 | `OI-1` | Should the API decide what counts as overdue, or is the frontend's check enough? | The API decides, through `GET /api/admin/sessions?overdue=true`, so every device shows the same carts as overdue. | Team | 2026-10-08 | `BR-overdue-server-decides`, [overdue.md](../design/overdue.md) |
-| `OI-6` | Will the app ever serve carts in more than one timezone at once? | Yes. Each organization's admin picks its organization's timezone, so the app needs one timezone per organization. Not built: the app has no organizations yet (`OI-17`, `OI-18`). | Team | 2026-10-15 | `BR-site-timezone`, `TD-single-site-timezone` |
+| `OI-6` | Will the app ever serve carts in more than one timezone at once? | Yes. Each organization's admin picks its organization's timezone, so the app needs one timezone per organization. Not built yet. | Team | 2026-10-15 | `BR-site-timezone`, [organizations.md](../design/organizations.md) |
 | `OI-7` | Should the frontend send every typed due time as an exact instant? | Yes. The SPA reads what was typed in the zone it labelled and sends a UTC instant. The API still accepts wall-clock text. | Team | 2026-10-15 | `BR-due-times-sent-as-instants` |
 | `OI-8` | Should every displayed time say which timezone it is in? | Yes. Every shown time ends with the zone's short name, like `CDT`. | Team | 2026-10-15 | `BR-times-show-zone` |
+| `OI-17` | What is an organization, and how does the desk reach its cart list? | Anyone running carts, such as a college's move-in desk or a company. The owner creates each one. The desk opens the organization's link, like `/tcu`, with no login. | Team | 2026-10-15 | `BR-organization-owns-carts`, `BR-organization-created-by-owner`, `BR-organization-link`, [organizations.md](../design/organizations.md) |
+| `OI-18` | How does an admin log in to their own organization, and only theirs? | With the organization's slug and its password, picked on the login page. Each password is stored hashed in the database, not in the environment. | Team | 2026-10-15 | `BR-admin-own-organization`, `BR-admin-password-hashed`, [organizations.md](../design/organizations.md) |

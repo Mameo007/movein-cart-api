@@ -132,6 +132,7 @@ doesn't need to. There's one API and one database because nothing in section 1.2
 | Desk | Carts | Lists carts; checks out and returns them | `app/routers/carts.py`, `CartList.jsx`, `CheckoutForm.jsx` | Settings | built |
 | Admin | Admin | Cart inventory, active checkouts and history, due-time edits, force return | `app/routers/admin.py`, `Admin*.jsx` | Auth, Carts (`close_session`), Settings | built |
 | Admin | Overdue | Decides which checkouts are overdue | [overdue.md](overdue.md) | Admin | planned, #16 |
+| (cross-cutting) | Organizations | Separates carts, checkouts, timezone, and admin login by organization | [organizations.md](organizations.md) | Auth | planned |
 | Admin | Notifications | Sends every email the system sends | [notifications.md](notifications.md) | Overdue, email provider | planned, #17, blocked on `OI-4` |
 | (cross-cutting) | Auth | Trades the shared password for a token; `require_admin` | `app/auth.py`, `frontend/src/auth.js` | none | built |
 | (cross-cutting) | Settings and time | The site timezone; converting times in and out | `app/routers/settings.py`, `app/timezones.py`, `frontend/src/time.js` | none | built |
