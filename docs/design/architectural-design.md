@@ -28,6 +28,7 @@ Business rules (`BR-*`) and open issues (`OI-*`) are cited from [docs/requiremen
 | 0.1 | 2026-10-08 | First version, written from the code at `e38545f` after M1 to M4 shipped |
 | 0.2 | 2026-10-09 | Checked against the running API; corrected `TD-silent-frontend-errors` and 8.2.2 |
 | 0.3 | 2026-10-15 | The SPA sends due times as instants (`OI-7`); removed `TD-wall-clock-due-times`; `OI-6` answered |
+| 0.4 | 2026-10-16 | A database per environment and a `staging` git branch ([environments.md](environments.md)); five new decisions; removed `TD-ci-after-merge` |
 
 ---
 
@@ -177,13 +178,14 @@ converts it. An admin changing it while the form is open can't move the due time
 |---|---|---|
 | SPA | Vercel, built from `frontend/`; `vercel.json` rewrites every path to `index.html` so deep links work | `npm run dev` on port 5173 |
 | API | Render, at `cart-management-967g.onrender.com` | `uvicorn app.main:app --reload` on port 8000 |
-| Database | Neon PostgreSQL | `DATABASE_URL` in a local `.env`; tests use SQLite |
+| Database | Neon PostgreSQL, branch `production` | Neon branch `staging`, through `DATABASE_URL` in a local `.env`; tests use SQLite, and Postgres in CI |
 
-**How a change gets there.** A pull request merges into `main`. GitHub Actions
-(`.github/workflows/test.yml`) runs `pytest`, and only if it passes calls Render's deploy hook.
-Vercel builds the frontend from the repository through its own GitHub integration, configured in
-Vercel rather than in this repo. Tests run only after a merge, not on the pull request
-(`TD-ci-after-merge`).
+**How a change gets there.** A feature branch merges into the `staging` git branch, and a release
+merges `staging` into `main` (`KD-staging-git-branch`). GitHub Actions (`.github/workflows/test.yml`)
+runs `pytest` on every pull request and every push to either branch, and only a passing push to
+`main` calls Render's deploy hook. Vercel builds the frontend from the repository through its own
+GitHub integration, configured in Vercel rather than in this repo. Nothing deploys `staging`
+(`OI-20`). The full picture is in [environments.md](environments.md).
 
 **Schema changes.** `Base.metadata.create_all` runs at API startup and creates missing tables. It
 never alters an existing one, so a column change is a manual change on Neon (`KD-no-migrations`).
@@ -214,7 +216,9 @@ only by admin endpoints and by the checkout response to whoever made the checkou
 until their cart is deleted (`TD-resident-data-kept-forever`).
 
 **Secrets** live in Render's environment (`DATABASE_URL`, `ADMIN_PASSWORD`, `ADMIN_JWT_SECRET`) and
-GitHub Actions secrets (`RENDER_DEPLOY_HOOK_URL`), never in the repository. `VITE_API_URL` is public
+GitHub Actions secrets (`RENDER_DEPLOY_HOOK_URL`), never in the repository. Production's
+`DATABASE_URL` is only on Render; a developer's `.env` points at the Neon `staging` branch
+(`KD-production-url-only-on-render`). `VITE_API_URL` is public
 and is built into the SPA.
 
 ### 8.2 Other concepts
@@ -263,9 +267,10 @@ two simultaneous checkouts of one cart can both succeed (`RISK-concurrent-checko
 
 #### 8.2.7 Testing
 
-`pytest` with FastAPI's `TestClient` against SQLite, swapped in with
+`pytest` with FastAPI's `TestClient` against SQLite locally and Postgres 17 in CI, swapped in with
 `app.dependency_overrides[get_db]`; admin secrets are set with `monkeypatch`. Every endpoint and
-failure path gets a test. Behavior that only Postgres shows, such as concurrency, isn't covered.
+failure path gets a test. Tests never use Neon (`KD-tests-own-database`). Concurrency isn't
+covered on either database.
 
 #### 8.2.8 Logging and auditing
 
@@ -291,6 +296,7 @@ with the real one.
 | 1 | A due time means the same moment everywhere (quality goal 1) | `KD-utc-storage` |
 | 2 | Free, with nobody to operate it (quality goal 3) | `KD-deployment-shape`, `KD-neon-database`, `KD-no-migrations` |
 | 3 | Admin data is protected, the desk is not (quality goal 2, `BR-desk-no-login`) | `KD-shared-admin-password` |
+| 4 | Developing and testing never change production data | `KD-one-database-url`, `KD-develop-on-staging-database`, `KD-production-url-only-on-render`, `KD-tests-own-database`, `KD-staging-git-branch` |
 
 ### 9.2 Key decisions
 
@@ -333,6 +339,57 @@ with the real one.
 - **Trade-off:** A column change on an existing table is a manual change on Neon. #17 may add the
   first ones (`notifications.md`); revisit this decision then.
 
+The five decisions below were made on 2026-10-16, after a local run was found to be writing to the
+production database. They are explained together in [environments.md](environments.md).
+
+**`KD-one-database-url`: the code reads one `DATABASE_URL`; each environment sets its value.** Accepted.
+- **Context:** The same code runs on Render, on a laptop, and in the tests, each needing a
+  different database.
+- **Decision:** `app/database.py` reads `DATABASE_URL` with no default. Render, `.env`, and
+  `tests/conftest.py` each set it.
+- **Rejected:** A variable per environment (`DATABASE_PROD_URL`, `DATABASE_STG_URL`), which the
+  code doesn't read, so the app stopped starting when it was tried. Code that picks a URL from an
+  environment name, which adds a production-only path no test runs.
+- **Trade-off:** Switching a laptop's database means editing `.env` or setting the variable on the
+  command line.
+
+**`KD-develop-on-staging-database`: a laptop uses a Neon branch copied from production.** Accepted.
+- **Context:** Running the app locally wrote to production. Local SQLite fixed that, but it isn't
+  the database production runs.
+- **Decision:** A Neon branch named `staging`, made from `production`, is the database in `.env`.
+- **Rejected:** Production, which exposes real data to every local click. SQLite, which hides
+  Postgres-only behavior. Postgres in Docker, which works offline but starts empty and is one more
+  thing to run.
+- **Trade-off:** Needs the internet. Staging's data drifts from production's until it's reset from
+  its parent in the Neon console.
+
+**`KD-production-url-only-on-render`: production's database URL is kept off laptops.** Accepted.
+- **Context:** A URL in `.env` is one edit away from being used, and `.env` can leak.
+- **Decision:** Production's `DATABASE_URL` is only in Render's environment. When it's needed, it's
+  copied from the Neon console for that one task.
+- **Rejected:** Keeping it commented out in `.env` for convenience.
+- **Trade-off:** Reading production takes a trip to the Neon console.
+
+**`KD-tests-own-database`: tests use a throwaway database, never Neon.** Accepted.
+- **Context:** Tests need a known starting state and wipe tables between tests.
+- **Decision:** `tests/conftest.py` sets `DATABASE_URL` before the app reads `.env`: SQLite
+  locally, a Postgres container in CI through `TEST_DATABASE_URL`. It refuses a Neon host.
+- **Rejected:** The Neon `staging` branch. Tests would pass or fail depending on what someone last
+  clicked, their cleanup would wipe staging, CI would need its password, and every query would
+  cross the internet.
+- **Trade-off:** A local run on SQLite can miss a Postgres-only bug that CI then catches, so
+  the first sign of it is a failed pull request.
+
+**`KD-staging-git-branch`: changes collect on `staging` and release to `main`.** Accepted.
+- **Context:** Pull requests went straight into `main`, which deploys at once. A schema change, like
+  the one for organizations, had nowhere to be tried before it was live.
+- **Decision:** Feature branches merge into `staging`. A release is a pull request from `staging`
+  into `main`, merged with a merge commit. Only `main` deploys. CI tests both branches and every
+  pull request.
+- **Rejected:** Pull requests straight into `main`.
+- **Trade-off:** Two pull requests per change reach production. Nothing deploys `staging` yet
+  (`OI-20`), so trying it means running it locally.
+
 ## 10. Quality Requirements
 
 ### 10.1 Quality requirements overview
@@ -358,7 +415,6 @@ The quality goals in section 1.2 are the overview.
 | `TD-single-site-timezone` | Debt | One timezone for the whole app, but `OI-6` decided each organization picks its own. A second organization can't be supported without a schema change. | Add organizations, then move the timezone onto them. | `BR-site-timezone`, `OI-6`, `OI-17`, `OI-18` |
 | `TD-no-clock-injection` | Debt | `utc_now()` can't be set from a test, so time-based tests rely on the API accepting past due times. | Patch `utc_now` where a test needs a fixed clock. | `OI-5`, [overdue.md](overdue.md#tests) |
 | `TD-resident-data-kept-forever` | Debt | Residents' names, phone numbers, and room numbers are never deleted unless their cart is. | A cleanup after move-in, or an admin "clear history" action. | 8.1 |
-| `TD-ci-after-merge` | Debt | Tests run on push to `main`, not on pull requests, so a failing change is merged before anyone sees it fail. The deploy is still blocked. | Add `pull_request` to the workflow's triggers, and keep the deploy step on `main` only. | 7 |
 | `TD-silent-frontend-errors` | Debt | A failed checkout or return, due-time change, or force return only logs to the console. The RA or admin sees nothing happen. Only `AdminCarts.jsx` shows the API's `detail`. | Show the API's `detail` message on the page, as `AdminCarts.jsx` does. | 8.2.2 |
 
 ## 12. Glossary

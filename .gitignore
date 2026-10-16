@@ -24,3 +24,6 @@ test.db
 # Claude
 .claude/
 convo-summary.md
+
+# Local development database
+local.db

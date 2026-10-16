@@ -12,18 +12,18 @@ Resident assistants (RAs) see which carts are free, check one out to a resident 
 | Layer | Technology |
 |---|---|
 | Backend | Python 3.12, [FastAPI](https://fastapi.tiangolo.com/), [SQLAlchemy 2](https://www.sqlalchemy.org/), Pydantic v2 |
-| Database | PostgreSQL on [Neon](https://neon.tech/) (SQLite for tests) |
+| Database | PostgreSQL on [Neon](https://neon.tech/) (SQLite for local tests, Postgres in CI) |
 | Auth | Shared admin password exchanged for a JWT (PyJWT) |
 | Frontend | React 19, React Router 7, Vite |
 | Testing | pytest with FastAPI's `TestClient` |
-| CI/CD | GitHub Actions runs the tests on every push to `main`, then triggers a Render deploy |
+| CI/CD | GitHub Actions runs the tests on every pull request and on pushes to `staging` and `main`; a push to `main` then triggers a Render deploy |
 | Hosting | Render (API), Vercel (frontend) |
 
 All timestamps are stored in UTC and converted to and from the site timezone that the admin sets.
 
 ## Setup
 
-You need Python 3.12, Node.js, and a PostgreSQL database (a free Neon project works).
+You need Python 3.12, Node.js, and a PostgreSQL database for development. Use a Neon branch made from production, not production itself; [environments.md](docs/design/environments.md) explains why and how.
 
 ### Backend
 
@@ -36,7 +36,7 @@ pip install -r requirements.txt
 Create `.env` in the repository root:
 
 ```
-DATABASE_URL=postgresql://user:password@host/dbname
+DATABASE_URL=postgresql://user:password@your-staging-branch-host/dbname
 ADMIN_PASSWORD=your-admin-password
 ADMIN_JWT_SECRET=a-long-random-secret
 ```
@@ -73,7 +73,7 @@ The app runs on http://localhost:5173, the origin the API's CORS settings allow 
 pytest tests/ -v
 ```
 
-The tests use their own SQLite database (set in `tests/conftest.py`), so they need no `.env` and no network access.
+The tests use their own SQLite database (set in `tests/conftest.py`), so they need no `.env` and no network access. CI runs the same tests against a throwaway Postgres; [environments.md](docs/design/environments.md#tests) shows how to do that locally.
 
 ## Project structure
 
@@ -100,7 +100,7 @@ cart-api/
 │       └── components/         # CartList, CheckoutForm, Admin* pages, RequireAdmin guard
 ├── docs/
 │   ├── requirements/           # Glossary, business rules, open issues
-│   └── design/                 # Architecture, and one design per feature (overdue, notifications)
+│   └── design/                 # Architecture, environments, and one design per feature
 ├── tests/
 │   └── test_carts.py           # API tests against an isolated SQLite database
 ├── .github/workflows/test.yml  # CI: test, then deploy to Render
