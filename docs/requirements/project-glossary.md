@@ -50,3 +50,15 @@ until a rename is worth a migration on Neon.
 | **Wall-clock time** | A time typed with no offset, like `2026-08-20T14:00`. Means that time in the site timezone. | naive `datetime` input to `to_utc()` |
 | **Instant** | A time with an offset, like the quick-extend buttons send. An exact point in time, whatever the site timezone. | aware `datetime` input to `to_utc()` |
 | **Stored time** | Every timestamp in the database: naive UTC. Serialized with a trailing `Z`. | `utc_now()`, `UTCDateTime` |
+
+## Environments
+
+"Branch" means two things here: a git branch holds code, and a Neon branch is a copy of a
+database. They share the name `staging` but aren't connected. Say which one you mean.
+
+| Term | Meaning | In code |
+|---|---|---|
+| **Production** | The deployed app real users reach: the API on Render, the SPA on Vercel, and the Neon branch `production`. | `DATABASE_URL` in Render's environment |
+| **Staging database** | The Neon branch `staging`, a copy of production's database that a developer's laptop uses. Safe to break; reset it from its parent in the Neon console. | `DATABASE_URL` in `.env` |
+| **`staging` branch** | The git branch that collects merged changes before a release into `main`. Nothing deploys it. | `branches: [main, staging]` in `.github/workflows/test.yml` |
+| **Release** | A pull request from `staging` into `main`. Merging it deploys. | |

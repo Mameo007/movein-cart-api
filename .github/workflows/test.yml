@@ -1,8 +1,12 @@
 name: Run Tests
 
+# Tests run on every pull request and on every push to staging or main, so a failing change
+# is caught before it merges. Only a push to main deploys.
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
+  pull_request:
+    branches: [main, staging]
 
 jobs:
   test-and-deploy:
@@ -27,6 +31,7 @@ jobs:
         run: pytest tests/ -v
 
       - name: Deploy to Render
-        if: success() # Only trigger deploy if all previous steps succeeded
+        # Only a passing push to main deploys; staging and pull requests stop after the tests
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
 

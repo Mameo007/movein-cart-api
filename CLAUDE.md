@@ -4,7 +4,7 @@ Move-In Day Cart Tracker: FastAPI + SQLAlchemy API on Render, PostgreSQL on Neon
 
 ## Commands
 
-- Backend: `source venv/bin/activate && uvicorn app.main:app --reload`
+- Backend: `source venv/bin/activate && uvicorn app.main:app --reload` (uses the Neon `staging` branch from `.env`; production's URL is only on Render)
 - Tests: `pytest tests/ -v` (SQLite only; `tests/conftest.py` sets `DATABASE_URL`, so no `.env` or network needed)
 - Frontend (from `frontend/`): `npm run dev`, `npm run build`, `npm run lint`
 
@@ -93,5 +93,10 @@ Match the existing pattern for the kind of thing you're naming. Data keeps one s
 
 ## Git workflow
 
-- One branch per issue (`feat/...`, `fix/...`, `docs/...`), then a pull request into `main`. CI runs tests on push to `main`, then deploys to Render.
+Two long-lived branches: `main` is what's deployed, and `staging` collects changes waiting for the next release. See `docs/design/environments.md` for why.
+
+- **Work:** one branch per issue (`feat/...`, `fix/...`, `docs/...`, `ci/...`), cut from `staging`, then a pull request into `staging`. CI runs the tests on the pull request.
+- **Try it:** with `staging` checked out, run the app locally. `.env` points at the Neon `staging` database branch, so nothing touches production. Rehearse any manual schema change there first.
+- **Release:** a pull request from `staging` into `main`, merged with a merge commit, never squashed, so the two branches keep the same history. A push to `main` runs the tests, then deploys to Render.
+- **Urgent fix:** branch from `main`, pull request into `main`, then merge `main` back into `staging`.
 - Pull request descriptions follow `.github/PULL_REQUEST_TEMPLATE.md`: at most three lines per section, and never restate the diff.
