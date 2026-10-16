@@ -1,3 +1,4 @@
+import os
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
@@ -5,7 +6,11 @@ from app.database import Base, get_db
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-engine = create_engine("sqlite:///./test.db", connect_args={"check_same_thread": False})
+# conftest.py sets DATABASE_URL to the throwaway test database before this runs
+TEST_DATABASE_URL = os.environ["DATABASE_URL"]
+# check_same_thread is a SQLite-only option; Postgres rejects it
+connect_args = {"check_same_thread": False} if TEST_DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(TEST_DATABASE_URL, connect_args=connect_args)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 @pytest.fixture(autouse=True)

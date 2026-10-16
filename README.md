@@ -12,7 +12,7 @@ Resident assistants (RAs) see which carts are free, check one out to a resident 
 | Layer | Technology |
 |---|---|
 | Backend | Python 3.12, [FastAPI](https://fastapi.tiangolo.com/), [SQLAlchemy 2](https://www.sqlalchemy.org/), Pydantic v2 |
-| Database | PostgreSQL on [Neon](https://neon.tech/) (SQLite for tests) |
+| Database | PostgreSQL on [Neon](https://neon.tech/) (SQLite for local tests, Postgres in CI) |
 | Auth | Shared admin password exchanged for a JWT (PyJWT) |
 | Frontend | React 19, React Router 7, Vite |
 | Testing | pytest with FastAPI's `TestClient` |
@@ -73,7 +73,7 @@ The app runs on http://localhost:5173, the origin the API's CORS settings allow 
 pytest tests/ -v
 ```
 
-The tests use their own SQLite database (set in `tests/conftest.py`), so they need no `.env` and no network access.
+The tests use their own SQLite database (set in `tests/conftest.py`), so they need no `.env` and no network access. CI runs the same tests against a throwaway Postgres; [environments.md](docs/design/environments.md#tests) shows how to do that locally.
 
 ## Project structure
 

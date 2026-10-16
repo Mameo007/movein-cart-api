@@ -7,8 +7,7 @@
 > **See:** [architecture](architectural-design.md) sections 7 and 9, [open issues](../requirements/OPEN-ISSUES.md)
 > **Designed against:** `4289053`
 
-**Status:** Accepted on 2026-10-16. Built, except the Postgres test database in CI, which is on
-branch `ci/postgres-tests`.
+**Status:** Accepted and built on 2026-10-16.
 
 ---
 
@@ -26,7 +25,7 @@ its own database and adds a `staging` git branch where changes wait before they 
 |---|---|---|---|
 | Production | Render's environment settings | Neon branch `production` | Real users |
 | Laptop | `.env` in the repository root (gitignored) | Neon branch `staging` | Running the app by hand, rehearsing schema changes |
-| Tests | `tests/conftest.py`, which overrides `.env` | A SQLite file, emptied for every test | `pytest`, locally and in CI |
+| Tests | `tests/conftest.py`, which overrides `.env` | Locally a SQLite file; in CI a Postgres 17 container. Emptied for every test. | `pytest` |
 
 The word "staging" names two unrelated things. The **Neon branch** `staging` is a copy of the
 production database. The **git branch** `staging` holds code waiting for release. Merging into the
@@ -96,10 +95,21 @@ through its own GitHub integration, outside this repository.
 ## Tests
 
 `tests/conftest.py` sets `DATABASE_URL` before the app reads `.env`, so a test run can't reach Neon
-even when `.env` points there. Locally the tests use SQLite, because it's fast and needs nothing
-installed. SQLite isn't Postgres: it is looser about types and constraints and handles time
-differently, so a Postgres-only bug can pass locally. Branch `ci/postgres-tests` makes CI run the
-same tests against a fresh Postgres to catch those.
+even when `.env` points there. It uses `TEST_DATABASE_URL` if set, SQLite otherwise, and refuses
+any Neon host, since the tests drop every table.
+
+Locally the tests use SQLite, because it's fast and needs nothing installed. SQLite isn't Postgres:
+it is looser about types and constraints and handles time differently, so a Postgres-only bug can
+pass locally. CI starts a Postgres 17 container (Neon runs 17) for each run and sets
+`TEST_DATABASE_URL` to it, so those bugs fail the pull request instead. To run the same thing
+locally with Docker:
+
+```bash
+docker run -d --rm --name cart-test-pg -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test \
+  -e POSTGRES_DB=test -p 55432:5432 postgres:17
+TEST_DATABASE_URL=postgresql://test:test@localhost:55432/test pytest tests/ -v
+docker stop cart-test-pg
+```
 
 ## Not covered yet
 

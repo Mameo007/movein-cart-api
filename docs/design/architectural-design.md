@@ -178,7 +178,7 @@ converts it. An admin changing it while the form is open can't move the due time
 |---|---|---|
 | SPA | Vercel, built from `frontend/`; `vercel.json` rewrites every path to `index.html` so deep links work | `npm run dev` on port 5173 |
 | API | Render, at `cart-management-967g.onrender.com` | `uvicorn app.main:app --reload` on port 8000 |
-| Database | Neon PostgreSQL, branch `production` | Neon branch `staging`, through `DATABASE_URL` in a local `.env`; tests use SQLite |
+| Database | Neon PostgreSQL, branch `production` | Neon branch `staging`, through `DATABASE_URL` in a local `.env`; tests use SQLite, and Postgres in CI |
 
 **How a change gets there.** A feature branch merges into the `staging` git branch, and a release
 merges `staging` into `main` (`KD-staging-git-branch`). GitHub Actions (`.github/workflows/test.yml`)
@@ -267,10 +267,10 @@ two simultaneous checkouts of one cart can both succeed (`RISK-concurrent-checko
 
 #### 8.2.7 Testing
 
-`pytest` with FastAPI's `TestClient` against SQLite, swapped in with
+`pytest` with FastAPI's `TestClient` against SQLite locally and Postgres 17 in CI, swapped in with
 `app.dependency_overrides[get_db]`; admin secrets are set with `monkeypatch`. Every endpoint and
-failure path gets a test. Tests never use Neon (`KD-tests-own-database`). Behavior that only
-Postgres shows, such as concurrency, isn't covered.
+failure path gets a test. Tests never use Neon (`KD-tests-own-database`). Concurrency isn't
+covered on either database.
 
 #### 8.2.8 Logging and auditing
 
@@ -372,13 +372,13 @@ production database. They are explained together in [environments.md](environmen
 
 **`KD-tests-own-database`: tests use a throwaway database, never Neon.** Accepted.
 - **Context:** Tests need a known starting state and wipe tables between tests.
-- **Decision:** `tests/conftest.py` sets `DATABASE_URL` to a SQLite file before the app reads
-  `.env`.
+- **Decision:** `tests/conftest.py` sets `DATABASE_URL` before the app reads `.env`: SQLite
+  locally, a Postgres container in CI through `TEST_DATABASE_URL`. It refuses a Neon host.
 - **Rejected:** The Neon `staging` branch. Tests would pass or fail depending on what someone last
   clicked, their cleanup would wipe staging, CI would need its password, and every query would
   cross the internet.
-- **Trade-off:** SQLite misses Postgres-only bugs. Branch `ci/postgres-tests` runs CI against
-  Postgres to close that gap.
+- **Trade-off:** A local run on SQLite can miss a Postgres-only bug that CI then catches, so
+  the first sign of it is a failed pull request.
 
 **`KD-staging-git-branch`: changes collect on `staging` and release to `main`.** Accepted.
 - **Context:** Pull requests went straight into `main`, which deploys at once. A schema change, like
