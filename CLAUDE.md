@@ -5,7 +5,7 @@ Move-In Day Cart Tracker: FastAPI + SQLAlchemy API on Render, PostgreSQL on Neon
 ## Commands
 
 - Backend: `source venv/bin/activate && uvicorn app.main:app --reload` (uses the Neon `staging` branch from `.env`; production's URL is only on Render)
-- Tests: `pytest tests/ -v` (SQLite only; `tests/conftest.py` sets `DATABASE_URL`, so no `.env` or network needed)
+- Tests: `pytest tests/ -v` (SQLite locally; `tests/conftest.py` sets `DATABASE_URL`, so no `.env` or network needed). CI runs them on Postgres 17 through `TEST_DATABASE_URL`.
 - Frontend (from `frontend/`): `npm run dev`, `npm run build`, `npm run lint`
 
 ## Conventions
@@ -16,7 +16,7 @@ Move-In Day Cart Tracker: FastAPI + SQLAlchemy API on Render, PostgreSQL on Neon
 - **"Session"** in `app/models.py` is a cart checkout, not a SQLAlchemy or login session.
 - **Docs:** use the terms in `docs/requirements/project-glossary.md` (say "checkout" in prose, not "session"). Check `docs/requirements/business-rules.md` before changing behavior and update it in the same PR. Before building an issue, read its design in `docs/design/` and any `OPEN-ISSUES.md` entry it depends on; record a new unanswered question there instead of guessing.
 - **Schema changes:** tables come from `Base.metadata.create_all` in the `lifespan` startup hook in `app/main.py`, with no migrations. A column change to an existing table needs a manual change on Neon.
-- **Tests:** SQLite via `app.dependency_overrides[get_db]`; admin env vars set with `monkeypatch`. Add a test for every new endpoint and failure path.
+- **Tests:** SQLite locally and Postgres in CI, via `app.dependency_overrides[get_db]`; never a Neon URL; admin env vars set with `monkeypatch`. Add a test for every new endpoint and failure path.
 - **Frontend:** plain CSS, no component library. API calls use `import.meta.env.VITE_API_URL`.
 
 ## Writing
