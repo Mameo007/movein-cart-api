@@ -46,7 +46,7 @@ until a rename is worth a migration on Neon.
 
 | Term | Meaning | In code |
 |---|---|---|
-| **Site timezone** | The one IANA zone (default `America/Chicago`) that times are typed in and shown in. Set by an admin. See [OPEN-ISSUES.md](OPEN-ISSUES.md#timezone-handling) for its known gaps. | `Setting` row `timezone`, `get_site_timezone()` |
+| **Site timezone** | The one IANA zone (default `America/Chicago`) that times are typed in and shown in. Set by an admin. To become one per organization (`OI-6`). See [OPEN-ISSUES.md](OPEN-ISSUES.md#timezone-handling) for its known gaps. | `Setting` row `timezone`, `get_site_timezone()` |
 | **Wall-clock time** | A time typed with no offset, like `2026-08-20T14:00`. Means that time in the site timezone. | naive `datetime` input to `to_utc()` |
 | **Instant** | A time with an offset, like the quick-extend buttons send. An exact point in time, whatever the site timezone. | aware `datetime` input to `to_utc()` |
 | **Stored time** | Every timestamp in the database: naive UTC. Serialized with a trailing `Z`. | `utc_now()`, `UTCDateTime` |
