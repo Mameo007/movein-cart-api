@@ -89,5 +89,6 @@ both.
 
 - `OI-4`, `OI-11`: blocking.
 - `OI-3`: a grace period changes when an overdue email goes out.
-- `OI-17`: once organizations exist, an email uses its checkout's organization timezone, not one
-  global setting.
+- The provider is Brevo's API (`OI-22`, [dorms.md](dorms.md)), since Render's free plan blocks
+  SMTP. Its free plan sends about 300 emails a day, a limit if `OI-4` emails residents. The
+  timezone stays one app-wide setting (`OI-6`).

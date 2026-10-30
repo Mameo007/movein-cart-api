@@ -29,6 +29,7 @@ Business rules (`BR-*`) and open issues (`OI-*`) are cited from [docs/requiremen
 | 0.2 | 2026-10-09 | Checked against the running API; corrected `TD-silent-frontend-errors` and 8.2.2 |
 | 0.3 | 2026-10-15 | The SPA sends due times as instants (`OI-7`); removed `TD-wall-clock-due-times`; `OI-6` answered |
 | 0.4 | 2026-10-16 | A database per environment and a `staging` git branch ([environments.md](environments.md)); five new decisions; removed `TD-ci-after-merge` |
+| 0.5 | 2026-10-29 | `OI-6` answered again: one timezone for every dorm; removed `TD-single-site-timezone`. Dorms are designed in [dorms.md](dorms.md), not built |
 
 ---
 
@@ -321,8 +322,7 @@ with the real one.
   is typed or shown.
 - **Rejected:** Storing local times, which change meaning when the timezone setting does. Using
   each browser's own timezone, which shows the same due time differently on two devices.
-- **Trade-off:** Exactly one timezone (`TD-single-site-timezone`), though `OI-6` decided on one per
-  organization.
+- **Trade-off:** Exactly one timezone. Enough while every dorm is on one campus (`OI-6`).
 
 **`KD-neon-database`: PostgreSQL on Neon.** Accepted.
 - **Decision:** A Neon Postgres database, with `pool_pre_ping=True` because Neon closes idle
@@ -382,7 +382,7 @@ production database. They are explained together in [environments.md](environmen
 
 **`KD-staging-git-branch`: changes collect on `staging` and release to `main`.** Accepted.
 - **Context:** Pull requests went straight into `main`, which deploys at once. A schema change, like
-  the one for organizations, had nowhere to be tried before it was live.
+  the one for dorms, had nowhere to be tried before it was live.
 - **Decision:** Feature branches merge into `staging`. A release is a pull request from `staging`
   into `main`, merged with a merge commit. Only `main` deploys. CI tests both branches and every
   pull request.
@@ -412,7 +412,6 @@ The quality goals in section 1.2 are the overview.
 | `RISK-concurrent-checkout` | Risk | Two RAs tap Checkout on the same cart at once. Both requests read `AVAILABLE`, both insert a checkout, and the cart has two active checkouts, breaking `BR-one-active-checkout`. Return then closes only one of them. | Make the status change conditional: `UPDATE carts SET status='IN_USE' WHERE id=? AND status='AVAILABLE'`, and refuse when no row changed. Or lock the row with `with_for_update()`. | `BR-one-active-checkout` |
 | `RISK-render-cold-start` | Risk | If the API is on Render's free plan, it spins down when idle, and the first request after that takes many seconds. The first RA of the morning sees a hung page. | Open the app once before the desk opens; or a paid plan for move-in week. | `KD-deployment-shape` |
 | `RISK-open-desk-api` | Risk | Anyone who finds the API's URL can check out or return any cart, or flood the list with checkouts. | Accepted for move-in day. If it's abused, a shared desk code like the admin password. | `BR-desk-no-login` |
-| `TD-single-site-timezone` | Debt | One timezone for the whole app, but `OI-6` decided each organization picks its own. A second organization can't be supported without a schema change. | Add organizations, then move the timezone onto them. | `BR-site-timezone`, `OI-6`, `OI-17`, `OI-18` |
 | `TD-no-clock-injection` | Debt | `utc_now()` can't be set from a test, so time-based tests rely on the API accepting past due times. | Patch `utc_now` where a test needs a fixed clock. | `OI-5`, [overdue.md](overdue.md#tests) |
 | `TD-resident-data-kept-forever` | Debt | Residents' names, phone numbers, and room numbers are never deleted unless their cart is. | A cleanup after move-in, or an admin "clear history" action. | 8.1 |
 | `TD-silent-frontend-errors` | Debt | A failed checkout or return, due-time change, or force return only logs to the console. The RA or admin sees nothing happen. Only `AdminCarts.jsx` shows the API's `detail`. | Show the API's `detail` message on the page, as `AdminCarts.jsx` does. | 8.2.2 |

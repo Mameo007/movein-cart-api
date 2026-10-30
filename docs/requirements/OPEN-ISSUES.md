@@ -15,10 +15,10 @@ the team decides it and records the rule as a team decision.
 
 Ordered by the cost of a wrong guess:
 
-1. **`OI-17` and `OI-18`, what an organization is and how its admin logs in.** `OI-6` decided
-   on one timezone per organization, and the app has no organizations. Every table, query, and
-   the login change shape, with a manual schema change on Neon. Design it before #17.
-2. **`OI-4`, who gets emailed.** It blocks all of #17. Residents give no email address today.
+1. **`OI-4`, who gets emailed.** It blocks all of #17. Residents give no email address today.
+   Brevo's free plan (`OI-22`) caps sending at about 300 a day, which matters if residents are
+   emailed.
+2. **`OI-23` to `OI-25`, the rest of [dorms.md](../design/dorms.md).** None blocks building it.
 3. The rest are local to one screen or one rule. `OI-12` to `OI-16` are cleanup with an obvious
    answer, best done together in one `fix/text-consistency` pull request.
 
@@ -39,13 +39,13 @@ Ordered by the cost of a wrong guess:
 | `OI-15` | Rename `admin_login` to fit the `verb_resource` pattern every other route handler uses? | Same as `OI-14`: a function name, not a URL. | Team | 2026-10-08 |
 | `OI-16` | Delete the Vite starter-template leftovers? `frontend/src/App.css` (`.counter`, `.hero`, `.ticks`, and more) isn't imported anywhere; `.counter` in `index.css` is unused; `src/assets/hero.png`, `react.svg`, `vite.svg`, and `public/icons.svg` aren't referenced. `favicon.svg` and `#root` are used and stay. | Dead files that look like part of the app to anyone reading it. Check `npm run build` and the deployed site after deleting. | Team | 2026-10-08 |
 | `OI-20` | Should the `staging` git branch deploy somewhere, like a second Render service on the Neon `staging` database? | Today a change merged into `staging` can only be tried by running it locally. A deployed staging would show Render and Vercel problems before release, but it's a second free service to keep running, a second deploy hook, and its Vercel URL would have to be added to the CORS allowlist in `app/main.py`. | Team | 2026-10-16 |
-| `OI-17` | What is an organization, and what belongs to one? Carts, checkouts, and the timezone are global today. How does an RA's cart list know which organization it is for: a path like `/<org-slug>`, a desk code, or something else? | `OI-6` gives each organization its own timezone, and nothing in the app has an organization yet. Adding one is a manual schema change on Neon for `carts`, `sessions`, and `settings`, and every query has to filter by it. Needs a design doc in `docs/design/` before any code. | Team | 2026-10-15 |
-| `OI-18` | How does an admin log in to their own organization, and only theirs? | One shared password (`KD-shared-admin-password`) can't tell organizations apart. A password per organization or real admin accounts both change `app/auth.py` and what the token carries, and an admin must never see another organization's checkouts. | Team | 2026-10-15 |
+| `OI-23` | Does a new hall director taking over a dorm (`BR-admin-transfer`) also need an invite code? | [dorms.md](../design/dorms.md) assumes not: the current admin's transfer link is the invitation. A "yes" adds a field to accepting a transfer. | Team | 2026-10-29 |
+| `OI-24` | How does an admin who forgets their password get back in? | Each dorm has exactly one admin (`BR-one-admin-per-dorm`), so nobody else can let them in. Without a reset by email, the developer fixes it by hand in the database. | Team | 2026-10-29 |
+| `OI-25` | Can a dorm be deleted, and by whom? | Nothing deletes one today. Deleting it removes its carts, checkouts, and admin, and frees its name and desk code. | Team | 2026-10-29 |
 
 ## Timezone handling
 
-What works, and why it isn't finished. `OI-9` to `OI-11`, `OI-17`, and `OI-18` are the
-individual questions.
+What works, and why it isn't finished. `OI-9` to `OI-11` are the individual questions.
 
 **What works.** Storage and comparison are correct and don't depend on where the server or the
 browser is: every time is stored as UTC (`BR-store-utc`), "now" is `utc_now()`, and the API sends
@@ -61,20 +61,22 @@ with the data:
 
 - **Data doesn't record its timezone** (`OI-10`). A checkout stores instants only, so a timezone
   change rewrites how all of history reads.
-- **There is one timezone, and there should be one per organization** (`OI-6`). That needs
-  organizations first (`OI-17`, `OI-18`): a data-model change, not a setting.
+- **There is one timezone for every dorm.** That's intended: all dorms are on one campus
+  (`OI-6`, answered again on 2026-10-29).
 - **Edge cases are resolved silently** (`OI-9`), and **the server can't format a time** (`OI-11`).
 
-**Suggested order.** Design organizations (`OI-17`, `OI-18`) next, since the timezone moves onto
-them. Decide `OI-10` in the same design: a checkout's organization may be enough to know its zone.
-`OI-9` can stay open as an accepted limitation. The architecture records the single timezone as
-technical debt (`TD-single-site-timezone`).
+**Suggested order.** `OI-10` matters only if the site timezone ever changes, which with one
+campus should be rare. `OI-11` is needed for #17. `OI-9` can stay open as an accepted limitation.
 
 ## Resolved
 
 | ID | Question | Answer | Answered by | Date | Filed in |
 |---|---|---|---|---|---|
 | `OI-1` | Should the API decide what counts as overdue, or is the frontend's check enough? | The API decides, through `GET /api/admin/sessions?overdue=true`, so every device shows the same carts as overdue. | Team | 2026-10-08 | `BR-overdue-server-decides`, [overdue.md](../design/overdue.md) |
-| `OI-6` | Will the app ever serve carts in more than one timezone at once? | Yes. Each organization's admin picks its organization's timezone, so the app needs one timezone per organization. Not built: the app has no organizations yet (`OI-17`, `OI-18`). | Team | 2026-10-15 | `BR-site-timezone`, `TD-single-site-timezone` |
+| `OI-6` | Will the app ever serve carts in more than one timezone at once? | No. On 2026-10-15 the answer was one timezone per organization. On 2026-10-29 organizations became dorms on one campus, so one app-wide timezone is enough, and no dorm admin can change it. | Team | 2026-10-29 | `BR-site-timezone`, [dorms.md](../design/dorms.md) |
 | `OI-7` | Should the frontend send every typed due time as an exact instant? | Yes. The SPA reads what was typed in the zone it labelled and sends a UTC instant. The API still accepts wall-clock text. | Team | 2026-10-15 | `BR-due-times-sent-as-instants` |
 | `OI-8` | Should every displayed time say which timezone it is in? | Yes. Every shown time ends with the zone's short name, like `CDT`. | Team | 2026-10-15 | `BR-times-show-zone` |
+| `OI-17` | What is an organization, and what belongs to one? How does an RA's cart list know which one it is for? | An organization is a dorm on one campus. Carts belong to a dorm, checkouts through their cart; the timezone stays app-wide. An RA enters the dorm's desk code once per device. Existing data is deleted, not moved. | Team | 2026-10-29 | `BR-dorm-owns-carts`, `BR-desk-code`, `BR-cart-number-unique-per-dorm`, [dorms.md](../design/dorms.md) |
+| `OI-18` | How does an admin log in to their own organization, and only theirs? | A personal account, exactly one per dorm, made with an invite code and a verified school email. A new hall director takes over by a transfer that removes the old account. | Team | 2026-10-29 | `BR-one-admin-per-dorm`, `BR-admin-signup`, `BR-admin-transfer`, [dorms.md](../design/dorms.md) |
+| `OI-21` | Are invite codes single-use or reusable, and how does the developer make them? | Single-use. The developer inserts them in Neon's SQL editor, and changes the site timezone the same way. | Team | 2026-10-29 | `BR-admin-signup`, [dorms.md](../design/dorms.md#operator-tasks) |
+| `OI-22` | Which email provider sends the verification and transfer links? | Brevo's transactional API, free, from one verified sender address and no domain. Render's free plan blocks SMTP, so it must be an HTTPS API. Accepted risk: mail may land in spam. | Team | 2026-10-29 | [dorms.md](../design/dorms.md#key-decisions) |

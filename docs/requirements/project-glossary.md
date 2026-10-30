@@ -9,14 +9,27 @@ term in code has a different name, the **In code** column shows it.
 |---|---|---|
 | **Resident** | A student moving in who borrows a cart. A resident never uses the app; an RA enters their details. | `first_name`, `last_name`, `phone_number`, `room_number` on a checkout |
 | **RA** (resident assistant) | Staff at the desk who check carts out and in from the public cart list. No login. | none |
-| **Admin** | Anyone who knows the shared admin password. Manages carts, checkouts, and settings from `/admin`. Not tied to a person. | `require_admin`, `sub: "admin"` in the token |
+| **Admin** | Anyone who knows the shared admin password. Manages carts, checkouts, and settings from `/admin`. Not tied to a person. Once dorms exist, a dorm's one hall director, with a personal account (`BR-one-admin-per-dorm`). | `require_admin`, `sub: "admin"` in the token |
+
+## Dorms
+
+Planned in [dorms.md](../design/dorms.md). Earlier documents say "organization" for a dorm; say
+"dorm".
+
+| Term | Meaning | In code |
+|---|---|---|
+| **Dorm** | One residence hall using the app. Has its own carts, checkouts, desk code, and one admin. All dorms are on one campus. | `Dorm`, `dorms`, `dorm_id` (planned) |
+| **Desk code** | A dorm's short code that an RA types once on a desk device. The admin can change it. | `Dorm.desk_code` (planned) |
+| **Desk token** | What a desk device gets for the desk code and sends with every request. Stops working when the code changes. | `sub: "desk"`, `desk_token` in `localStorage` (planned) |
+| **Invite code** | A code the developer hands out. Needed, with a school email, to sign up a dorm. | `InviteCode` (planned) |
+| **Transfer** | The admin handing their dorm to a new hall director, whose account replaces theirs. | `POST /api/admin/dorm/transfer` (planned) |
 
 ## Carts and checkouts
 
 | Term | Meaning | In code |
 |---|---|---|
 | **Cart** | One physical moving cart, identified to people by its cart number. | `Cart` |
-| **Cart number** | The label painted or taped on the cart, e.g. `"12"`. Unique. Free text, not the database id. | `Cart.cart_number` |
+| **Cart number** | The label painted or taped on the cart, e.g. `"12"`. Unique (once dorms exist, unique within a dorm). Free text, not the database id. | `Cart.cart_number` |
 | **Cart status** | Exactly one of `AVAILABLE`, `IN_USE`, `MAINTENANCE`. | `Cart.status` |
 | `AVAILABLE` | On the floor and free to check out. | |
 | `IN_USE` | Checked out to a resident. Only a checkout sets this. | |
@@ -46,7 +59,7 @@ until a rename is worth a migration on Neon.
 
 | Term | Meaning | In code |
 |---|---|---|
-| **Site timezone** | The one IANA zone (default `America/Chicago`) that times are typed in and shown in. Set by an admin. To become one per organization (`OI-6`). See [OPEN-ISSUES.md](OPEN-ISSUES.md#timezone-handling) for its known gaps. | `Setting` row `timezone`, `get_site_timezone()` |
+| **Site timezone** | The one IANA zone (default `America/Chicago`) that times are typed in and shown in. Set by an admin today; once dorms exist, shared by every dorm and set only by the developer (`OI-6`). See [OPEN-ISSUES.md](OPEN-ISSUES.md#timezone-handling) for its known gaps. | `Setting` row `timezone`, `get_site_timezone()` |
 | **Wall-clock time** | A time typed with no offset, like `2026-08-20T14:00`. Means that time in the site timezone. | naive `datetime` input to `to_utc()` |
 | **Instant** | A time with an offset, like the quick-extend buttons send. An exact point in time, whatever the site timezone. | aware `datetime` input to `to_utc()` |
 | **Stored time** | Every timestamp in the database: naive UTC. Serialized with a trailing `Z`. | `utc_now()`, `UTCDateTime` |
